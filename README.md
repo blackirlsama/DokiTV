@@ -4,6 +4,9 @@
 
 Tianmu是一款**高并发、易扩展的视频互动平台**，聚焦视频播放、实时弹幕、用户互动等核心场景，旨在解决传统视频平台架构老旧、扩展性弱的问题，同时通过技术落地展示主流互联网产品的底层实现逻辑。
 
+## 效果预览
+https://raw.githubusercontent.com/blackirlsama/tianmu/images/3.png
+
 ## 项目背景
 
 随着视频内容生态的爆发，市面上多数老旧项目存在架构僵化、并发支撑不足的问题。Tianmu平台以“易扩展、高性能”为核心目标：
@@ -45,23 +48,24 @@ Tianmu是一款**高并发、易扩展的视频互动平台**，聚焦视频播�
 10. **操作频率限制**：通过Redis Lua脚本实现点赞、收藏等操作的频率控制，保护系统资源。
 
 
-https://raw.githubusercontent.com/blackirlsama/tianmu/main/docs/images/1.png
-https://raw.githubusercontent.com/blackirlsama/tianmu/main/docs/images/2.png
+https://raw.githubusercontent.com/blackirlsama/tianmu/images/1.png
+https://raw.githubusercontent.com/blackirlsama/tianmu/images/2.png
 
 ## 技术选型
 
-技术栈	版本号
-SpringBoot	2.6.13 / 3.5.4（多服务适配）
-JDK	17
-Maven	3.6.1
-MySQL	8.0
-Canal	v1.1.7
-RocketMQ	5.2.0
-ElasticSearch	7.17.23
-Kibana	7.17.23
-IK 分词器	7.17.23
-MinIO	RELEASE.2025-02-18T16-25-55Z
-Redis	7.4.0
-npm	11.0.0
-Node	v22.11.0
+| 技术栈 | 版本号 |
+| ----- | ----- |
+| SpringBoot | 2.6.13 / 3.5.4（多服务适配） |
+| JDK | 17 |
+| Maven | 3.6.1 |
+| MySQL | 8.0 |
+| Canal | v1.1.7 |
+| RocketMQ | 5.2.0 |
+| ElasticSearch | 7.17.23 |
+| Kibana | 7.17.23 |
+| IK 分词器 | 7.17.23 |
+| MinIO | RELEASE.2025-02-18T16-25-55Z |
+| Redis | 7.4.0 |
+| npm | 11.0.0 |
+| Node | v22.11.0 |
 
