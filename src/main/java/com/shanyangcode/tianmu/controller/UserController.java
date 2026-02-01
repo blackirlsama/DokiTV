@@ -3,10 +3,7 @@ package com.shanyangcode.tianmu.controller;
 import com.shanyangcode.tianmu.entity.User;
 import com.shanyangcode.tianmu.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -28,4 +25,14 @@ public class UserController {
     public User getUserById(@PathVariable Long userId) {
         return userService.getById(userId);
     }
+
+    //发送邮箱验证码
+    // send verification code
+    @GetMapping("/sendVerificationCode")
+    public String sendVerificationCode(@RequestParam String account) {
+        userService.sendVerificationCode(account);
+        return "verification code sent successfully";
+    }
+
 }
+
