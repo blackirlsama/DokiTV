@@ -1,7 +1,9 @@
 package com.shanyangcode.tianmu.controller;
 
 import com.shanyangcode.tianmu.entity.User;
+import com.shanyangcode.tianmu.model.RegisterRequest;
 import com.shanyangcode.tianmu.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,6 +34,13 @@ public class UserController {
     public String sendVerificationCode(@RequestParam String account) {
         userService.sendVerificationCode(account);
         return "verification code sent successfully";
+    }
+
+    // register
+    @PostMapping("/register")
+    public String register(@RequestBody RegisterRequest registerRequest, HttpServletRequest httpServletRequest) {
+        userService.register(registerRequest, httpServletRequest);
+        return "user registered";
     }
 
 }

@@ -1,13 +1,18 @@
 package com.shanyangcode.tianmu.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.shanyangcode.tianmu.entity.User;
 import com.shanyangcode.tianmu.mapper.UserMapper;
+import com.shanyangcode.tianmu.model.RegisterRequest;
 import com.shanyangcode.tianmu.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.apache.commons.mail.EmailException;
 import org.apache.commons.mail.SimpleEmail;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.RequestBody;
 
+import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -18,7 +23,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public void sendVerificationCode(String account) {
 
-        String vCode = "130829"; // needs to be replaced by random numbers
+        String vCode = "123456"; // needs to be replaced by random numbers
         System.out.println("The function operates in " + Thread.currentThread().getName());
 
         executor.submit(() -> {
@@ -49,4 +54,30 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             }
         });
     }
+
+    @Override
+    public void register(RegisterRequest registerRequest, HttpServletRequest httpServletRequest) {
+        // 核对验证码
+        if (!registerRequest.getVerificationCode().equals("123456")) {
+            return;
+        }
+
+        // 检查用户是否存在
+        LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(User::getEmail, registerRequest.getAccount());
+        if (this.getOne(queryWrapper) != null) {
+            return;
+        }
+
+        // 创建用户并进行持久化
+        User user = new User();
+        user.setUserId(123987000L);
+        user.setEmail(registerRequest.getAccount());
+        user.setPassword(registerRequest.getPassword());
+        user.setPhone("");
+        user.setNickname(registerRequest.getNickname());
+
+        this.baseMapper.insert(user);
+    }
+
 }
