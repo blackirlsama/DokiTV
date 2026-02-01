@@ -5,7 +5,7 @@
 Tianmu是一款**高并发、易扩展的视频互动平台**，聚焦视频播放、实时弹幕、用户互动等核心场景，旨在解决传统视频平台架构老旧、扩展性弱的问题，同时通过技术落地展示主流互联网产品的底层实现逻辑。
 
 ## 效果预览
-https://raw.githubusercontent.com/blackirlsama/tianmu/images/3.png
+![本地图片](./images/3.png)
 
 ## 项目背景
 
@@ -48,8 +48,9 @@ https://raw.githubusercontent.com/blackirlsama/tianmu/images/3.png
 10. **操作频率限制**：通过Redis Lua脚本实现点赞、收藏等操作的频率控制，保护系统资源。
 
 
-https://raw.githubusercontent.com/blackirlsama/tianmu/images/1.png
-https://raw.githubusercontent.com/blackirlsama/tianmu/images/2.png
+![本地图片](./images/1.png)
+
+![本地图片](./images/2.png)
 
 ## 技术选型
 
