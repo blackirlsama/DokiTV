@@ -20,6 +20,6 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/user/fans/list", "/api/user/loginPassword", "/api/video/list",
                         "/api/video/detail", "/api/video/comment/list", "/api/video/submit/list",
                         "/api/video/coin/list", "/api/video/like/list", "/api/video/favorite/list",
-                        "/api/category", "/api/category/list");
+                        "/api/category", "/api/category/list","/api/file/check");
     }
 }
