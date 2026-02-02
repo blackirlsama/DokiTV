@@ -1,83 +1,173 @@
 package com.shanyangcode.tianmu.service.impl;
 
+import cn.hutool.core.util.IdUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.shanyangcode.tianmu.common.ErrorCode;
+import com.shanyangcode.tianmu.constants.JWTConstant;
+import com.shanyangcode.tianmu.constants.SMSConstant;
+import com.shanyangcode.tianmu.constants.UserConstant;
 import com.shanyangcode.tianmu.entity.User;
+import com.shanyangcode.tianmu.entity.UserStats;
+import com.shanyangcode.tianmu.exception.BusinessException;
 import com.shanyangcode.tianmu.mapper.UserMapper;
-import com.shanyangcode.tianmu.model.RegisterRequest;
+import com.shanyangcode.tianmu.model.dto.user.RegisterRequest;
+import com.shanyangcode.tianmu.model.vo.user.LoginResponse;
 import com.shanyangcode.tianmu.service.UserService;
+import com.shanyangcode.tianmu.service.UserStatsService;
+import com.shanyangcode.tianmu.utils.JwtUtil;
+import com.shanyangcode.tianmu.utils.RandomCodeUtil;
+import com.shanyangcode.tianmu.utils.SendMailUtil;
 import jakarta.servlet.http.HttpServletRequest;
-import org.apache.commons.mail.EmailException;
-import org.apache.commons.mail.SimpleEmail;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.DigestUtils;
 
-import java.util.Random;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 @Service
+@Slf4j
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
-    private static final ExecutorService executor = Executors.newFixedThreadPool(5);
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
 
+    @Autowired
+    private UserStatsService userStatsService;
     @Override
     public void sendVerificationCode(String account) {
+        // check corner case
+        if (StringUtils.isBlank(account)) {
+            throw new BusinessException(ErrorCode.PHONE_EMAIL_ERROR);
+        }
 
-        String vCode = "123456"; // needs to be replaced by random numbers
-        System.out.println("The function operates in " + Thread.currentThread().getName());
+        // 生成验证码并发送
+        String code = RandomCodeUtil.generateSixDigitRandomNumber();
+        if (account.matches(UserConstant.EMAIL_REGEX)) {
+            SendMailUtil.sendEmailCode(account, code);
+        } else if (account.matches(UserConstant.PHONE_REGEX)) {
+            throw new BusinessException(ErrorCode.PHONE_REGISTRATION_NOT_SUPPORTED);
+        } else {
+            throw new BusinessException(ErrorCode.PHONE_EMAIL_ERROR);
+        }
 
-        executor.submit(() -> {
-            try {
-                // 设置TLS协议
-                System.setProperty("mail.smtp.ssl.protocols", "TLSv1.2");
-                // 创建邮箱对象
-                SimpleEmail mail = new SimpleEmail();
-                // 设置发送邮件的服务器
-                mail.setHostName("smtp.qq.com");
-                // "你的邮箱号"+ "上文开启SMTP获得的授权码"
-                mail.setAuthentication("799243133@qq.com", "opltwhrxmeinbdaf");
-                // 发送邮件 "你的邮箱号"+"发送时用的昵称"
-                mail.setFrom("799243133@qq.com", "orange");
-                // 使用安全链接
-                mail.setSSLOnConnect(true);
-                // 接收用户的邮箱
-                mail.addTo(account);
-                // 邮件的主题(标题)
-                mail.setSubject("注册验证码");
-                // 邮件的内容
-                mail.setMsg("主人你好喵，您的验证码为:" + vCode + "(五分钟内有效)");
-                // 发送
-                mail.send();
-                System.out.println("message sent in " + Thread.currentThread().getName());
-            } catch (EmailException e) {
-                throw new RuntimeException(e);
-            }
-        });
+        // 保存验证码到 redis, 并设置过期时间
+        stringRedisTemplate.opsForValue().set(account, code, SMSConstant.SMS_EXPIRE_TIME, TimeUnit.MINUTES);
     }
 
     @Override
-    public void register(RegisterRequest registerRequest, HttpServletRequest httpServletRequest) {
-        // 核对验证码
-        if (!registerRequest.getVerificationCode().equals("123456")) {
-            return;
-        }
+    @Transactional(rollbackFor = Exception.class)
+    public LoginResponse register(RegisterRequest registerRequest, HttpServletRequest request) {
+        // 1. 参数校验
+        validateRegisterRequest(registerRequest);
 
-        // 检查用户是否存在
-        LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(User::getEmail, registerRequest.getAccount());
-        if (this.getOne(queryWrapper) != null) {
-            return;
-        }
+        // 2. 验证码校验
+        validateVerificationCode(registerRequest.getAccount(), registerRequest.getVerificationCode());
 
-        // 创建用户并进行持久化
-        User user = new User();
-        user.setUserId(123987000L);
-        user.setEmail(registerRequest.getAccount());
-        user.setPassword(registerRequest.getPassword());
-        user.setPhone("");
-        user.setNickname(registerRequest.getNickname());
+        // 3. 检查用户是否已存在
+        checkUserExistence(registerRequest.getAccount());
 
-        this.baseMapper.insert(user);
+        // 4. 创建用户
+        User newUser = createUser(registerRequest);
+
+        // 5. 保存用户信息(并发安全处理)
+        return saveUserAndGenerateToken(newUser, registerRequest.getAccount());
     }
 
+    // =========================== Private Helpers =============================
+
+    /**
+     * 校验注册请求参数
+     */
+    private void validateRegisterRequest(RegisterRequest request) {
+        String account = request.getAccount();
+        if (!account.matches(UserConstant.PHONE_REGEX) && !account.matches(UserConstant.EMAIL_REGEX)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号必须是有效的手机号或邮箱");
+        }
+        if (StringUtils.isBlank(request.getPassword())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "密码不能为空");
+        }
+        if (StringUtils.isBlank(request.getNickname())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "昵称不能为空");
+        }
+    }
+
+    /**
+     * 验证码校验
+     */
+    private void validateVerificationCode(String account, String code) {
+        String redisCode = stringRedisTemplate.opsForValue().get(account);
+        if (StringUtils.isBlank(redisCode) || !redisCode.equals(code)) {
+            throw new BusinessException(ErrorCode.VERIFICATION_CODE_ERROR);
+        }
+    }
+
+    /**
+     * 检查用户是否已存在
+     */
+    private void checkUserExistence(String account) {
+        LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
+        if (account.matches(UserConstant.EMAIL_REGEX)) {
+            queryWrapper.eq(User::getEmail, account);
+        }
+        if (this.getOne(queryWrapper) != null) {
+            throw new BusinessException(ErrorCode.USER_ALREADY_EXISTS);
+        }
+    }
+
+    /**
+     * 创建用户实体
+     */
+    private User createUser(RegisterRequest request) {
+        User user = new User();
+        user.setUserId(IdUtil.getSnowflake().nextId());
+        user.setNickname(request.getNickname());
+
+        // 设置账号(手机号或邮箱)
+        if (request.getAccount().matches(UserConstant.EMAIL_REGEX)) {
+            user.setEmail(request.getAccount());
+            user.setPhone("");
+        }
+
+        // 密码加密
+        String password = request.getPassword();
+        String encryptedPassword = DigestUtils.md5DigestAsHex((UserConstant.PASSWORD_SALT + password).getBytes());
+        user.setPassword(encryptedPassword);
+
+        return user;
+    }
+
+    /**
+     * 保存用户并生成Token(并发安全处理)
+     */
+    private LoginResponse saveUserAndGenerateToken(User user, String account) {
+        synchronized (account.intern()) {
+            // 保存用户
+            boolean saveSuccess = this.baseMapper.insert(user) > 0;
+
+            // 初始化用户统计信息
+            UserStats stats = new UserStats();
+            stats.setUserId(user.getUserId());
+            boolean saveStatsSuccess = userStatsService.save(stats);
+
+            if (!saveSuccess || !saveStatsSuccess) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "用户注册失败");
+            }
+
+            // 清理验证码
+            stringRedisTemplate.delete(account);
+
+            // 生成 Token
+            String token = JwtUtil.generate(user.getUserId().toString());
+            stringRedisTemplate.opsForValue().set(user.getUserId().toString(), token, JWTConstant.JWT_TIME_OUT, TimeUnit.DAYS);
+
+            // 返回用户信息和 Token
+            LoginResponse response = this.baseMapper.getUserInfo(user.getUserId());
+            response.setToken(token);
+            return response;
+        }
+    }
 }

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.shanyangcode.tianmu.mapper.UserMapper">
+    <select id="getUserInfo" resultType="com.shanyangcode.tianmu.model.vo.user.LoginResponse">
+        SELECT u.user_id,
+               u.phone,
+               u.nickname,
+               u.avatar,
+               u.gender,
+               u.description,
+               us.followers,
+               us.video_count,
+               us.following
+        FROM user u
+                 LEFT JOIN user_stats us ON u.user_id = us.user_id
+        WHERE u.is_delete = 0
+          AND u.user_id = #{userId}
+    </select>
+</mapper>
