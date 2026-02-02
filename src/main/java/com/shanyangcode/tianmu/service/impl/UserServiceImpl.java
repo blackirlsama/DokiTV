@@ -1,5 +1,6 @@
 package com.shanyangcode.tianmu.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.IdUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
@@ -11,7 +12,10 @@ import com.shanyangcode.tianmu.constants.UserConstant;
 import com.shanyangcode.tianmu.entity.User;
 import com.shanyangcode.tianmu.entity.UserStats;
 import com.shanyangcode.tianmu.exception.BusinessException;
+import com.shanyangcode.tianmu.exception.ThrowUtils;
 import com.shanyangcode.tianmu.mapper.UserMapper;
+import com.shanyangcode.tianmu.model.dto.user.LoginCodeRequest;
+import com.shanyangcode.tianmu.model.dto.user.LoginPasswordRequest;
 import com.shanyangcode.tianmu.model.dto.user.RegisterRequest;
 import com.shanyangcode.tianmu.model.vo.user.LoginResponse;
 import com.shanyangcode.tianmu.service.UserService;
@@ -77,6 +81,73 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         return saveUserAndGenerateToken(newUser, registerRequest.getAccount());
     }
 
+    @Override
+    public LoginResponse loginPassword(LoginPasswordRequest loginPasswordRequest, HttpServletRequest request) {
+        String account = loginPasswordRequest.getAccount();
+        String password = loginPasswordRequest.getPassword();
+
+        // 校验账号格式
+        validateAccountFormat(account);
+
+        // 获取当前用户信息
+        User user = getCurrentUser(account);
+
+        // 校验密码
+        String encryptedPassword = DigestUtils.md5DigestAsHex((UserConstant.PASSWORD_SALT + password).getBytes());
+        ThrowUtils.throwIf(!encryptedPassword.equals(user.getPassword()), ErrorCode.LOGIN_ERROR);
+
+        // 初始化登录响应对象并赋值用户基础信息
+        LoginResponse loginResponse = new LoginResponse();
+        BeanUtil.copyProperties(user, loginResponse);
+
+        // 赋值用户统计信息
+        UserStats userStats = userStatsService.getById(user.getUserId());
+        BeanUtil.copyProperties(userStats, loginResponse);
+
+        // 生成并存储jwt令牌
+        String token = JwtUtil.generate(user.getUserId().toString());
+        stringRedisTemplate.opsForValue().set(user.getUserId().toString(), token, JWTConstant.JWT_TIME_OUT, TimeUnit.DAYS);
+
+        // 为响应对象设置令牌
+        loginResponse.setToken(token);
+        return loginResponse;
+    }
+
+
+    @Override
+    public LoginResponse loginCode(LoginCodeRequest loginCodeRequest, HttpServletRequest request) {
+        String account = loginCodeRequest.getAccount();
+        String code = loginCodeRequest.getCode();
+
+        // 校验账号格式
+        validateAccountFormat(account);
+
+        // 获取当前用户信息
+        User user = getCurrentUser(account);
+
+        // 校验验证码有效性
+        String redisCode = stringRedisTemplate.opsForValue().get(account);
+        ThrowUtils.throwIf(redisCode == null || !redisCode.equals(code), ErrorCode.LOGIN_ERROR_CODE);
+
+        // 初始化登录响应对象并赋值用户基础信息
+        LoginResponse loginResponse = new LoginResponse();
+        BeanUtil.copyProperties(user, loginResponse);
+
+        // 赋值用户统计信息
+        UserStats userStats = userStatsService.getById(user.getUserId());
+        BeanUtil.copyProperties(userStats, loginResponse);
+
+        // 删除redis中存储的验证码（保证验证码单次有效）
+        stringRedisTemplate.delete(account);
+
+        // 生成并存储jwt令牌
+        String token = JwtUtil.generate(user.getUserId().toString());
+        stringRedisTemplate.opsForValue().set(user.getUserId().toString(), token, JWTConstant.JWT_TIME_OUT, TimeUnit.DAYS);
+
+        // 为响应对象设置令牌
+        loginResponse.setToken(token);
+        return loginResponse;
+    }
     // =========================== Private Helpers =============================
 
     /**
@@ -169,5 +240,30 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             response.setToken(token);
             return response;
         }
+    }
+
+    /**
+     * 校验注册请求参数
+     */
+    private void validateAccountFormat(String account) {
+        if (!account.matches(UserConstant.PHONE_REGEX) && !account.matches(UserConstant.EMAIL_REGEX)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号必须是有效的手机号或邮箱");
+        }
+    }
+
+    private User getCurrentUser(String account) {
+        LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
+        if (account.matches(UserConstant.EMAIL_REGEX)) {
+            queryWrapper.eq(User::getEmail, account);
+        } else if (account.matches(UserConstant.PHONE_REGEX)) {
+            queryWrapper.eq(User::getPhone, account);
+        }
+
+        User user = this.getOne(queryWrapper);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_EXISTS);
+        }
+
+        return user;
     }
 }

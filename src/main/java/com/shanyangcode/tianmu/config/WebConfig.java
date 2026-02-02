@@ -11,6 +11,7 @@ public class WebConfig implements WebMvcConfigurer {
     private JWTInterceptor jwtInterceptor;
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        //自定义的 Spring MVC 拦截器
         // 拦截所有请求
         registry.addInterceptor(jwtInterceptor).addPathPatterns("/**")
                 // 可以在这里排除一些不需要拦截的路径

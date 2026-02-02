@@ -2,6 +2,8 @@ package com.shanyangcode.tianmu.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.shanyangcode.tianmu.entity.User;
+import com.shanyangcode.tianmu.model.dto.user.LoginCodeRequest;
+import com.shanyangcode.tianmu.model.dto.user.LoginPasswordRequest;
 import com.shanyangcode.tianmu.model.dto.user.RegisterRequest;
 import com.shanyangcode.tianmu.model.vo.user.LoginResponse;
 import jakarta.servlet.http.HttpServletRequest;
@@ -12,5 +14,7 @@ public interface UserService extends IService<User> {
 
     LoginResponse register(@RequestBody RegisterRequest registerRequest, HttpServletRequest httpServletRequest);
 
-//    UserInfoResponse getUserInfo(UserInfoRequest userInfoRequest);
+    LoginResponse loginPassword(LoginPasswordRequest loginPasswordRequest, HttpServletRequest request);
+
+    LoginResponse loginCode(LoginCodeRequest loginCodeRequest, HttpServletRequest request);
 }
