@@ -24,7 +24,7 @@ public class SMSConstant {
 
     public static final String EMAIL_USER_NAME = "799243133@qq.com";
 
-    public static final String EMAIL_PASSWORD = "wuxlxhbtziqhbgag";
+    public static final String EMAIL_PASSWORD = "eiqzwmdtanitbeea";
 
     public static final String EMAIL_NAME = "花绿青";
 

@@ -102,16 +102,21 @@
             <version>5.7.17</version>
         </dependency>
 
-        <!-- Spring Boot 参数校验核心依赖（包含jakarta.validation.constraints） -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-validation</artifactId>
-        </dependency>
-
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
             <version>3.12.0</version> <!-- 选择最新稳定版本 -->
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot </groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+            <version>8.2.1</version>
         </dependency>
     </dependencies>
 

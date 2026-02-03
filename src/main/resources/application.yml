@@ -6,3 +6,11 @@ spring:
     url: jdbc:mysql://localhost:3306/tianmu?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=Asia/Shanghai
     username: root
     password: 080355  # enter your password
+
+# MinIO 配置
+minio:
+  url: http://127.0.0.1:9000 # 你的MinIO服务地址+端口（本地部署默认9000，云服务填实际地址）
+  access-key: minioadmin     # MinIO的访问密钥（AK，默认minioadmin，生产环境请修改）
+  secret-key: minioadmin     # MinIO的秘钥（SK，默认minioadmin，生产环境请修改）
+  bucket-name: tianmu        # 你的MinIO存储桶名称（需提前在MinIO控制台创建）
+  expire-time: 30            # 分片上传URL过期时间（分钟，和你之前的MinIOConstant对应）
