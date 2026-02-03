@@ -15,11 +15,26 @@ public class WebConfig implements WebMvcConfigurer {
         // 拦截所有请求
         registry.addInterceptor(jwtInterceptor).addPathPatterns("/**")
                 // 可以在这里排除一些不需要拦截的路径
-                .excludePathPatterns("/api/user/sendVerificationCode", "/api/user/register", "/api/user/info",
-                        "/api/user/loginCode", "/api/user/getCode","/api/user/focus/list",
-                        "/api/user/fans/list", "/api/user/loginPassword","/api/file/get/upload/urls","/api/video/list",
-                        "/api/video/detail", "/api/video/comment/list", "/api/video/submit/list",
-                        "/api/video/coin/list", "/api/video/like/list", "/api/video/favorite/list",
-                        "/api/category", "/api/category/list","/api/file/check");
+                .excludePathPatterns("/api/user/sendVerificationCode",
+                        "/api/user/register",
+                        "/api/user/info",
+                        "/api/user/loginCode",
+                        "/api/user/getCode",
+                        "/api/user/focus/list",
+                        "/api/user/fans/list",
+                        "/api/user/loginPassword",
+                        "/api/file/get/upload/progress",
+                        "/api/file/merge/chunk",
+                        "/api/file/get/upload/urls",
+                        "/api/video/list",
+                        "/api/video/detail",
+                        "/api/video/comment/list",
+                        "/api/video/submit/list",
+                        "/api/video/coin/list",
+                        "/api/video/like/list",
+                        "/api/video/favorite/list",
+                        "/api/category",
+                        "/api/category/list",
+                        "/api/file/check");
     }
 }

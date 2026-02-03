@@ -39,7 +39,7 @@ public class MinioUtil {
      * @return: boolean
      * @Date 2025/4/10 15:30
      */
-    public boolean ensureBucketExists(String bucketName) {
+    public boolean ensureBucketExists() {
         try {
             boolean exists = minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucketName).build());
             if (!exists) {
@@ -65,7 +65,7 @@ public class MinioUtil {
      */
     public String uploadChunkUrl(String fileHash, int countIndex, Integer expires, TimeUnit timeUnit) {
         String objectName = String.format("%s/%s", fileHash, countIndex);
-        ensureBucketExists(bucketName);
+        ensureBucketExists();
 
         try {
             return minioClient.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder().method(Method.PUT).bucket(bucketName).object(objectName).expiry(expires, timeUnit).build());
@@ -97,8 +97,8 @@ public class MinioUtil {
      * @return: String
      * @Date 2025/4/10 15:32
      */
-    public String mergeChuck(String fileHash, int chunkCount, String fileType) {
-        ensureBucketExists(bucketName);
+    public String mergeChunk(String fileHash, int chunkCount, String fileType) {
+        ensureBucketExists();
         String ObjectName = fileHash;
         int count = chunkCount;
         int chunkLists = getChunkProgress(fileHash).size();
@@ -138,7 +138,7 @@ public class MinioUtil {
      * @Date 2025/4/10 15:32
      */
     public String updateCover(MultipartFile file) throws Exception {
-        ensureBucketExists(bucketName);
+        ensureBucketExists();
         String fileSuffix = file.getOriginalFilename().substring(file.getOriginalFilename().lastIndexOf(".") + 1);
         String id = UUID.randomUUID().toString();
         String fileName = id + "." + fileSuffix;
@@ -161,7 +161,7 @@ public class MinioUtil {
      * @Date 2025/4/10 15:33
      */
     public Set<Integer> getChunkProgress(String fileHash) {
-        ensureBucketExists(bucketName);
+        ensureBucketExists();
         Set<Integer> chunks = new HashSet<>();
         String prefix = fileHash + "/";
         try {

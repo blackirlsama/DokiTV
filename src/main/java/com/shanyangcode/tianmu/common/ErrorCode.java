@@ -39,7 +39,8 @@ public enum ErrorCode {
     DELETE_COMMENT_ERROR(70017, "删除评论失败"),
     FILE_SIZE_ERROR(70018, "文件大小超过限制"),
     PHONE_REGISTRATION_NOT_SUPPORTED(70019, "不支持手机号登录注册"),
-    VERIFICATION_CODE_ERROR(70020, "验证码错误");
+    VERIFICATION_CODE_ERROR(70020, "验证码错误"),
+    PERSISTENCE_ERROR(70021, "持久化异常");
 
     /**
      * 状态码

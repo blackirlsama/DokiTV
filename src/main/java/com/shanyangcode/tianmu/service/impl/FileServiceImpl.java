@@ -1,15 +1,20 @@
 package com.shanyangcode.tianmu.service.impl;
 
+import cn.hutool.core.lang.Snowflake;
+import cn.hutool.core.util.IdUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.shanyangcode.tianmu.common.ErrorCode;
 import com.shanyangcode.tianmu.constants.MinIOConstant;
+import com.shanyangcode.tianmu.constants.SnowflakeConstant;
 import com.shanyangcode.tianmu.constants.ThreadPoolExecutorConstant;
-import com.shanyangcode.tianmu.entity.File;
 import com.shanyangcode.tianmu.exception.BusinessException;
+import com.shanyangcode.tianmu.exception.ThrowUtils;
 import com.shanyangcode.tianmu.mapper.FileMapper;
 import com.shanyangcode.tianmu.model.dto.file.InitUploadRequest;
+import com.shanyangcode.tianmu.model.dto.file.MergeChunkRequest;
+import com.shanyangcode.tianmu.entity.File;
 import com.shanyangcode.tianmu.service.FileService;
 import com.shanyangcode.tianmu.utils.MinioUtil;
 import jakarta.annotation.Resource;
@@ -18,6 +23,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
@@ -79,6 +85,7 @@ public class FileServiceImpl extends ServiceImpl<FileMapper, File> implements Fi
         CompletableFuture<Void> allFutures = CompletableFuture.allOf(
                 futures.toArray(new CompletableFuture[0])
         );
+
         try {
             // 等待超时：使用线程池配置的超时时间
             allFutures.get(ThreadPoolExecutorConstant.AWAIT_TERMINATION, TimeUnit.SECONDS);
@@ -96,9 +103,35 @@ public class FileServiceImpl extends ServiceImpl<FileMapper, File> implements Fi
         }
 
         // 4. 收集结果（按分片顺序排列）
-        return futures.stream()
-                .map(CompletableFuture::join) // 此时已完成，不会阻塞
-                .collect(Collectors.toList());
+        return futures.stream()  // 把 futures 变成“流”
+                .map(CompletableFuture::join) // 每个 future 调用 join()，得到结果，此时已完成，不会阻塞
+                .collect(Collectors.toList()); // 把所有结果装进一个 List<String>
+    }
+
+    @Override
+    public Set<Integer> getUploadProgress(String fileHash) {
+        return minioUtil.getChunkProgress(fileHash);
+    }
+
+    @Override
+    public String mergeChunk(MergeChunkRequest mergeChunkRequest) {
+        String fileHash = mergeChunkRequest.getFileHash();
+        int chunkCount = mergeChunkRequest.getChunkCount();
+        String fileType = mergeChunkRequest.getFileType();
+
+        // 合并文件
+        String url = minioUtil.mergeChunk(fileHash, chunkCount, fileType);
+
+        // 保存文件信息
+        File file = new File();
+        Snowflake snowflake = IdUtil.getSnowflake(SnowflakeConstant.WORKER_ID, SnowflakeConstant.DATA_CENTER_ID);
+        file.setFileId(snowflake.nextId());
+        file.setFileHash(fileHash);
+        file.setFileUrl(url);
+        boolean save = this.save(file);
+        ThrowUtils.throwIf(!save, ErrorCode.PERSISTENCE_ERROR);
+
+        return url;
     }
 }
 
