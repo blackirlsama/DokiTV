@@ -39,35 +39,65 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketFrame> {
 
 
+    /**
+     * RocketMQ生产者，用于发送消息到消息队列
+     */
     private final RocketMQProducer producer;
 
+    /**
+     * Redis模板，用于操作Redis数据
+     */
     private final StringRedisTemplate stringRedisTemplate;
 
+    /**
+     * 日志记录器，用于记录日志信息
+     */
     private static final Logger logger = LoggerFactory.getLogger(WebSocketHandler.class);
 
 
+    /**
+     * 用于存储视频ID和对应频道组的映射关系
+     */
     private static final ConcurrentMap<String, ChannelGroup> videoMap = new ConcurrentHashMap<>();
 
+    /**
+     * 用于存储频道中的视频ID属性
+     */
     private static final AttributeKey<String> VIDEOID = AttributeKey.valueOf("videoId");
 
 
 
+    /**
+     * 处理接收到的WebSocket消息
+     * @param ctx 通道处理器上下文
+     * @param msg 接收到的文本WebSocket帧
+     * @throws Exception 可能抛出的异常
+     */
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame msg) throws Exception {
+        // 获取视频ID
         String videoId = ctx.channel().attr(VIDEOID).get();
         if (videoId != null) {
+            // 检查用户是否在线
             boolean login = checkOnline(msg.text());
             System.out.println(login);
             if (login) {
                 System.out.println("消息发送成功：" + msg.text());
+                // 广播消息到对应视频的房间
                 broadcastMessage(videoId, onlineMessage(msg.text()));
             } else {
+                // 如果用户未登录，发送需要登录的消息
                 needLoginMessage(videoId, ctx.channel());
             }
         }
 
     }
 
+    /**
+     * 广播消息到指定视频的房间
+     * @param videoId 视频ID
+     * @param message 要广播的消息
+     */
     private void broadcastMessage(String videoId, String message) {
         if (message == null || message.isEmpty()) {
             return;
@@ -83,12 +113,21 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
         }
     }
 
+    /**
+     * 处理在线消息
+     * @param text 接收到的文本消息
+     * @return 处理后的在线消息字符串
+     */
     public String onlineMessage(String text) {
+        // 创建弹幕响应对象
         BulletScreenResponse bulletScreenResponse = new BulletScreenResponse();
         bulletScreenResponse.setType(WebSocketConstant.ONLINE_BULLET);
+        // 将文本转换为发送弹幕请求对象
         SendBulletRequest sendBulletRequest = JSONUtil.toBean(text, SendBulletRequest.class);
+        // 生成雪花ID并设置到弹幕请求对象中
         Snowflake snowflake = IdUtil.getSnowflake(SnowflakeConstant.WORKER_ID, SnowflakeConstant.DATA_CENTER_ID);
         sendBulletRequest.setBulletId(snowflake.nextId());
+    // 将请求对象转换为JSON字符串
         String messageMQ = JSONUtil.parse(sendBulletRequest).toString();
 
         // 生产
@@ -106,26 +145,44 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
     }
 
 
+/**
+ * 清理无效的通道
+ * @param group 需要清理的通道组
+ */
     private void cleanupInvalidChannels(ChannelGroup group) {
+        // 使用流式处理筛选出无效的通道（不活跃或已关闭）
         List<Channel> invalidChannels = group.stream().filter(ch -> !ch.isActive() || !ch.isOpen()).collect(Collectors.toList());
+        // 从通道组中移除所有无效通道
         invalidChannels.forEach(group::remove);
     }
 
 
     @Override
+    /**
+     * 处理用户触发的事件
+     * @param ctx ChannelHandlerContext 通道处理器上下文
+     * @param evt Object 触发的事件对象
+     * @throws Exception 可能抛出的异常
+     */
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
 
+        // 判断事件是否为空闲状态事件
         if (evt instanceof IdleStateEvent) {
             IdleStateEvent event = (IdleStateEvent) evt;
+            // 判断是否为读空闲状态
             if (event.state() == IdleState.READER_IDLE) {
+                // 记录日志：30秒没有读取到数据，发送心跳保持连接
                 log.info("30 秒没有读取到数据，发送心跳保持连接: {}", ctx.channel());
+                // 发送心跳消息，并添加监听器处理发送失败的情况
                 ctx.channel().writeAndFlush(new TextWebSocketFrame(JSON.toJSONString("ping"))).addListener(future -> {
                     if (!future.isSuccess()) {
+                        // 记录日志：发送心跳失败
                         log.error("发送心跳失败: {}", future.cause());
                     }
                 });
             }
         } else {
+            // 如果不是空闲状态事件，则调用父类的方法处理
             super.userEventTriggered(ctx, evt);
         }
 
@@ -135,16 +192,26 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
             String uri = handshake.requestUri();
             String videoId = extractRoomId(uri);
             if (videoId != null) {
+                // 设置通道的VIDEOID属性
                 ctx.channel().attr(VIDEOID).set(videoId);
+                // 加入房间
                 joinRoom(videoId, ctx.channel());
+                // 广播在线人数
                 broadcastOnlineCount(videoId);
             }
         }
     }
 
 
+/**
+ * 从URI中提取房间ID
+ * @param uri 包含房间ID的URI字符串
+ * @return 返回URI中的最后一个路径段作为房间ID
+ */
     private String extractRoomId(String uri) {
+    // 将URI按"/"分割成多个路径段
         String[] pathSegments = uri.split("/");
+    // 返回最后一个路径段作为房间ID
         return pathSegments[pathSegments.length - 1];
     }
 
