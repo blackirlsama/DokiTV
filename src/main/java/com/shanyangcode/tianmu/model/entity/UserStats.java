@@ -33,6 +33,13 @@ public class UserStats implements Serializable {
      */
     private Integer videoCount;
 
+
+    /**
+     * 硬币数
+     */
+    private Integer coinCount;
+
+
     /**
      * 创建时间
      */

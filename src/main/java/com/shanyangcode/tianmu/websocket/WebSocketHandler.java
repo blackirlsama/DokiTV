@@ -92,7 +92,7 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
         String messageMQ = JSONUtil.parse(sendBulletRequest).toString();
 
         // 生产
-        producer.sendMessage("tianmu-topic", messageMQ);
+        producer.sendMessage("zzz-topic", messageMQ);
 
 
         System.out.println("发送到consumer: " + messageMQ);

@@ -37,7 +37,7 @@ mybatis-plus:
       logic-not-delete-value: 0 # 逻辑未删除值（默认为 0）
 
 minio:
-  url: http://120.76.96.24:9000
+  url: http://127.0.0.1:9000
   access-key: minioadmin
   secret-key: minioadmin
   bucket-name: tianmu-upload

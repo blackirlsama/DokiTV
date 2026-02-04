@@ -1,5 +1,10 @@
 package com.shanyangcode.tianmu.service.impl;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.shanyangcode.tianmu.common.ErrorCode;
 import com.shanyangcode.tianmu.exception.ThrowUtils;
@@ -8,6 +13,7 @@ import com.shanyangcode.tianmu.model.dto.bullet.DeleteBulletRequest;
 import com.shanyangcode.tianmu.model.dto.bullet.SendBulletRequest;
 import com.shanyangcode.tianmu.model.entity.Bullet;
 import com.shanyangcode.tianmu.model.entity.User;
+import com.shanyangcode.tianmu.model.vo.bullet.OnlineBulletResponse;
 import com.shanyangcode.tianmu.service.BulletService;
 import com.shanyangcode.tianmu.service.UserService;
 
@@ -76,6 +82,28 @@ public class BulletServiceImpl extends ServiceImpl<BulletMapper, Bullet> impleme
         boolean result = this.removeById(bulletId);
         ThrowUtils.throwIf(!result, ErrorCode.SYSTEM_ERROR, "删除弹幕失败");
         return true;
+    }
+
+
+
+    @Override
+    public List<OnlineBulletResponse> getBulletList(Long videoId) {
+        List<OnlineBulletResponse> onlineBulletResponses = new ArrayList<>();
+
+        QueryWrapper<Bullet> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("video_Id", videoId);
+        List<Bullet> bullets = this.list(queryWrapper);
+        for (Bullet bullet : bullets) {
+            OnlineBulletResponse onlineBulletResponse = new OnlineBulletResponse();
+            onlineBulletResponse.setText(bullet.getContent());
+            onlineBulletResponse.setPlaybackTime(bullet.getPlaybackTime());
+            onlineBulletResponse.setBulletId(bullet.getBulletId().toString());
+            onlineBulletResponse.setUserId(bullet.getUserId().toString());
+            onlineBulletResponses.add(onlineBulletResponse);
+        }
+        // 对弹幕按时间排序
+        onlineBulletResponses.sort(Comparator.comparingDouble(OnlineBulletResponse::getPlaybackTime));
+        return onlineBulletResponses;
     }
 
 }
