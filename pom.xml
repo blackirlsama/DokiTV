@@ -1,94 +1,119 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<!--
+  Maven项目核心配置文件(POM)：Project Object Model
+  作用：统一管理项目依赖、构建插件、项目信息，是Maven构建的核心配置
+  适配：Spring Boot 3.x + JDK17 技术栈
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <!-- Maven POM模型版本，固定值4.0.0（Maven3+标准） -->
     <modelVersion>4.0.0</modelVersion>
+
+    <!-- 父工程配置：Spring Boot官方父工程 -->
+    <!-- 作用：统一管理Spring Boot所有starter依赖、插件的版本，避免手动重复指定版本，减少版本冲突 -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
+        <!-- Spring Boot核心版本，子依赖默认继承此版本（除手动指定外） -->
         <version>3.5.3</version>
-        <relativePath/> <!-- lookup parent from repository -->
+        <!-- 从Maven远程仓库查找父工程，不依赖本地路径 -->
+        <relativePath/>
     </parent>
+
+    <!-- 项目唯一坐标（GAV）：Maven仓库标识项目的核心属性 -->
+    <!-- 组织ID：公司/团队/项目组唯一标识，一般为域名反写 -->
     <groupId>com.shanyangcode</groupId>
+    <!-- 项目/模块ID：当前工程的唯一名称 -->
     <artifactId>tianmu</artifactId>
+    <!-- 项目版本：0.0.1-SNAPSHOT表示快照版（开发中使用），RELEASE为正式版 -->
     <version>0.0.1-SNAPSHOT</version>
+    <!-- 项目名称（可选）：用于Maven工程展示 -->
     <name>tianmu</name>
+    <!-- 项目描述（可选）：简单说明项目用途 -->
     <description>tianmu</description>
-    <url/>
-    <licenses>
-        <license/>
-    </licenses>
-    <developers>
-        <developer/>
-    </developers>
-    <scm>
+
+    <!-- 以下为Maven可选配置，当前项目暂未配置，保留默认节点 -->
+    <url/><!-- 项目官方地址 -->
+    <licenses><license/></licenses><!-- 项目许可证（如Apache2.0） -->
+    <developers><developer/></developers><!-- 项目开发者信息 -->
+    <scm><!-- 版本控制信息（如Git/SVN地址） -->
         <connection/>
         <developerConnection/>
         <tag/>
         <url/>
     </scm>
+
+    <!-- 全局属性配置：统一管理版本号、编码等，通过${属性名}引用，便于维护 -->
     <properties>
+        <!-- 指定项目编译/运行的JDK版本，Spring Boot3.x最低要求JDK17 -->
         <java.version>17</java.version>
     </properties>
+
+    <!-- 项目依赖配置核心节点：所有第三方/框架依赖均在此声明 -->
     <dependencies>
+        <!-- Spring Boot Web核心启动器：整合Spring MVC、Tomcat容器，实现Web接口开发 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
+        <!-- Spring Boot测试启动器：整合JUnit5、Mockito等，用于单元测试/集成测试 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
+            <scope>test</scope><!-- 仅测试环境生效，打包时不包含 -->
         </dependency>
 
-        <!-- Spring Boot 3 选择这个版本依赖-->
+        <!-- MyBatis-Plus Spring Boot3启动器：适配Spring Boot3，简化MyBatis开发（CRUD、分页等） -->
         <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
             <version>3.5.12</version>
         </dependency>
 
-        <!-- MySQL驱动 -->
+        <!-- MySQL数据库驱动：适配MySQL8.x，实现Java程序与MySQL数据库的连接 -->
         <dependency>
             <groupId>mysql</groupId>
             <artifactId>mysql-connector-java</artifactId>
             <version>8.0.33</version>
         </dependency>
 
-        <!-- Redis -->
+        <!-- Spring Boot Redis启动器：整合Spring Data Redis + Lettuce，实现Redis缓存操作 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
-        <!-- Lombok -->
+        <!-- Lombok：简化Java代码，通过注解自动生成get/set/构造器/toString等方法 -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <version>1.18.30</version>
-            <scope>provided</scope>
+            <scope>provided</scope><!-- 仅编译时生效，运行时IDE/构建工具已提供，打包不包含 -->
         </dependency>
 
-        <!-- send verification code by email -->
+        <!-- Apache Commons Email：简化Java发送邮件操作，用于实现验证码邮件发送功能 -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-email</artifactId>
             <version>1.4</version>
         </dependency>
 
+        <!-- JJWT核心API：Java JWT令牌开发，用于生成/解析JWT（接口鉴权、身份认证） -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
             <version>0.11.5</version>
         </dependency>
-
+        <!-- JJWT实现包：JWT底层实现，运行时生效 -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-impl</artifactId>
             <version>0.11.5</version>
-            <scope>runtime</scope>
+            <scope>runtime</scope><!-- 仅运行时生效，编译时无需依赖 -->
         </dependency>
-
+        <!-- JJWT Jackson序列化：整合Jackson，实现JWT的JSON格式序列化/反序列化 -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-jackson</artifactId>
@@ -96,32 +121,47 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Hutool全能工具类：封装Java常用操作（集合、日期、加密、IO等），简化开发 -->
         <dependency>
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-all</artifactId>
             <version>5.7.17</version>
         </dependency>
 
+        <!-- Apache Commons Lang3：Java基础工具类扩展，处理字符串、数组、对象等，弥补JDK原生不足 -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>3.12.0</version> <!-- 选择最新稳定版本 -->
+            <version>3.12.0</version>
         </dependency>
 
+        <!-- Spring Boot参数校验启动器：整合Jakarta Validation，实现接口请求参数校验（注解式：@NotNull、@Size等） -->
         <dependency>
-            <groupId>org.springframework.boot </groupId>
+            <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- MinIO Java客户端：操作MinIO对象存储服务，实现文件的上传、下载、删除等功能 -->
         <dependency>
             <groupId>io.minio</groupId>
             <artifactId>minio</artifactId>
             <version>8.2.1</version>
         </dependency>
+
+        <!-- Netty全量包：高性能NIO网络编程框架，实现自定义TCP/UDP协议、高性能网络通信 -->
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-all</artifactId>
+            <version>4.2.0.Final</version>
+        </dependency>
     </dependencies>
 
+    <!-- 项目构建配置：指定Maven插件、打包方式、资源过滤等 -->
     <build>
+        <!-- 插件配置节点 -->
         <plugins>
+            <!-- Spring Boot Maven插件：核心打包插件 -->
+            <!-- 作用：将Spring Boot项目打包为可执行JAR包（包含所有依赖），支持直接java -jar运行 -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

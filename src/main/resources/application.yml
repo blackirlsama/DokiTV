@@ -7,10 +7,41 @@ spring:
     username: root
     password: 080355  # enter your password
 
-# MinIO 配置
+data:
+  redis:
+    database: 15    # Redis 数据库索引（0-15，默认 0）
+    host: 127.0.0.1 # Redis 服务器地址
+    port: 6379      # Redis 服务器端口
+    timeout: 2000   # 客户端与 Redis 服务器建立连接的最大等待时间
+    #    password: e65K4t8w2 # Redis 服务器密码（当前未启用）
+    # 配置 redis 连接池
+    lettuce:
+      pool:
+        # 链接池中最小的空闲链接 默认为 0
+        min-idle: 4
+        # 链接池中最大的空闲连接 默认为 8
+        max-idle: 8
+        #连接池中最大数据库链接数 默认为 8
+        max-active: 8
+        #连接池最大阻塞等待时间
+        max-wait: 5000ms
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: isDelete # 全局逻辑删除的实体字段名
+      logic-delete-value: 1 # 逻辑已删除值（默认为 1）
+      logic-not-delete-value: 0 # 逻辑未删除值（默认为 0）
+
 minio:
-  url: http://127.0.0.1:9000 # 你的MinIO服务地址+端口（本地部署默认9000，云服务填实际地址）
-  access-key: minioadmin     # MinIO的访问密钥（AK，默认minioadmin，生产环境请修改）
-  secret-key: minioadmin     # MinIO的秘钥（SK，默认minioadmin，生产环境请修改）
-  bucket-name: tianmu        # 你的MinIO存储桶名称（需提前在MinIO控制台创建）
-  expire-time: 30            # 分片上传URL过期时间（分钟，和你之前的MinIOConstant对应）
+  url: http://120.76.96.24:9000
+  access-key: minioadmin
+  secret-key: minioadmin
+  bucket-name: tianmu-upload
+
+
+netty:
+  port: 9100
