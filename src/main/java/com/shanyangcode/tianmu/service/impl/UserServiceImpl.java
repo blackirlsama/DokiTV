@@ -41,6 +41,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Autowired
     private UserStatsService userStatsService;
+
+    /**
+     * 发送用户验证/登录验证码
+     * 支持邮箱验证码发送，手机号注册暂不支持；验证码生成后存入Redis并设置过期时间
+     * @param account 用户账号（邮箱/手机号），必传
+     */
     @Override
     public void sendVerificationCode(String account) {
         // check corner case
@@ -62,6 +68,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         stringRedisTemplate.opsForValue().set(account, code, SMSConstant.SMS_EXPIRE_TIME, TimeUnit.MINUTES);
     }
 
+
+    /**
+     * 用户注册核心方法
+     * 开启全局事务，保证用户信息与统计信息同时保存/回滚；含多轮校验、并发安全处理，注册成功后生成JWT令牌
+     * @param registerRequest 注册请求体，含账号、密码、昵称、验证码等核心参数
+     * @param request HTTP请求对象，预留扩展使用
+     * @return LoginResponse 登录响应对象，含用户基础信息、统计信息、JWT令牌
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public LoginResponse register(RegisterRequest registerRequest, HttpServletRequest request) {
@@ -81,6 +95,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         return saveUserAndGenerateToken(newUser, registerRequest.getAccount());
     }
 
+
+    /**
+     * 密码登录方法
+     * 支持邮箱/手机号密码登录，密码采用MD5+盐加密校验；登录成功后生成JWT令牌并存入Redis，返回用户全量信息
+     * @param loginPasswordRequest 密码登录请求体，含账号、密码
+     * @param request HTTP请求对象，预留扩展使用
+     * @return LoginResponse 登录响应对象，含用户基础信息、统计信息、JWT令牌
+     */
     @Override
     public LoginResponse loginPassword(LoginPasswordRequest loginPasswordRequest, HttpServletRequest request) {
         String account = loginPasswordRequest.getAccount();
@@ -114,6 +136,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
 
+
+    /**
+     * 验证码登录方法
+     * 支持邮箱/手机号验证码登录，验证码单次有效（登录成功后删除Redis缓存）；登录成功后生成JWT令牌
+     * @param loginCodeRequest 验证码登录请求体，含账号、验证码
+     * @param request HTTP请求对象，预留扩展使用
+     * @return LoginResponse 登录响应对象，含用户基础信息、统计信息、JWT令牌
+     */
     @Override
     public LoginResponse loginCode(LoginCodeRequest loginCodeRequest, HttpServletRequest request) {
         String account = loginCodeRequest.getAccount();
@@ -151,7 +181,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     // =========================== Private Helpers =============================
 
     /**
-     * 校验注册请求参数
+     * 校验注册请求参数的合法性
+     * 校验账号格式（邮箱/手机号）、密码非空、昵称非空，不满足则抛出对应参数异常
+     * @param request 注册请求体
      */
     private void validateRegisterRequest(RegisterRequest request) {
         String account = request.getAccount();
@@ -167,7 +199,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     /**
-     * 验证码校验
+     * 校验验证码的有效性
+     * 从Redis中获取对应账号的验证码，校验非空+一致性，不满足则抛出验证码错误异常
+     * @param account 用户账号（邮箱/手机号）
+     * @param code 用户输入的验证码
      */
     private void validateVerificationCode(String account, String code) {
         String redisCode = stringRedisTemplate.opsForValue().get(account);
@@ -177,7 +212,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     /**
-     * 检查用户是否已存在
+     * 检查用户账号是否已存在
+     * 根据账号格式（仅邮箱）查询数据库，已存在则抛出用户已注册异常
+     * @param account 用户账号（邮箱/手机号）
      */
     private void checkUserExistence(String account) {
         LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
@@ -190,7 +227,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     /**
-     * 创建用户实体
+     * 构建并初始化用户实体对象
+     * 雪花算法生成用户唯一ID，密码MD5+盐加密，按账号格式赋值邮箱/手机号
+     * @param request 注册请求体
+     * @return User 初始化完成的用户实体对象
      */
     private User createUser(RegisterRequest request) {
         User user = new User();
@@ -212,7 +252,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     /**
-     * 保存用户并生成Token(并发安全处理)
+     * 保存用户信息+初始化统计信息，生成JWT令牌（并发安全处理）
+     * 使用account.intern()做同步锁，防止同一账号并发注册；注册成功后清理Redis验证码
+     * @param user 初始化完成的用户实体
+     * @param account 用户账号（邮箱/手机号）
+     * @return LoginResponse 登录响应对象，含用户全量信息与JWT令牌
      */
     private LoginResponse saveUserAndGenerateToken(User user, String account) {
         synchronized (account.intern()) {
@@ -243,7 +287,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     /**
-     * 校验注册请求参数
+     * 统一校验用户账号格式
+     * 校验账号是否为有效邮箱/手机号，不满足则抛出参数格式异常
+     * @param account 用户账号（邮箱/手机号）
      */
     private void validateAccountFormat(String account) {
         if (!account.matches(UserConstant.PHONE_REGEX) && !account.matches(UserConstant.EMAIL_REGEX)) {
@@ -251,6 +297,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
     }
 
+
+    /**
+     * 根据账号查询当前用户信息
+     * 支持邮箱/手机号查询，用户不存在则抛出用户未注册异常
+     * @param account 用户账号（邮箱/手机号）
+     * @return User 数据库中的用户实体对象
+     */
     private User getCurrentUser(String account) {
         LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
         if (account.matches(UserConstant.EMAIL_REGEX)) {

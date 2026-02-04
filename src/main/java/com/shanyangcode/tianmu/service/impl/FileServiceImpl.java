@@ -36,6 +36,13 @@ public class FileServiceImpl extends ServiceImpl<FileMapper, File> implements Fi
     @Resource
     private MinioUtil minioUtil;
 
+
+    /**
+     * 文件存在性校验（秒传核心方法）
+     * 根据文件唯一哈希值查询数据库，若文件已存在则返回访问链接，实现秒传功能
+     * @param fileHash 文件唯一哈希值（MD5/SHA1），必传
+     * @return 存在则返回文件访问URL，不存在则返回null
+     */
     @Override
     public String checkFileExistence(String fileHash) {
         if (StringUtils.isBlank(fileHash)) {
@@ -50,6 +57,13 @@ public class FileServiceImpl extends ServiceImpl<FileMapper, File> implements Fi
         return file != null ? file.getFileUrl() : null;
     }
 
+
+    /**
+     * 初始化分片上传，批量生成所有分片的MinIO预签名上传URL
+     * 采用CompletableFuture异步生成分片URL，提升大批量分片的生成效率
+     * @param initUploadRequest 分片上传初始化请求体，包含fileHash、chunkCount等核心参数
+     * @return 按分片索引顺序排列的预签名URL列表，可直接供前端直传MinIO
+     */
     @Override
     public List<String> getUploadUrls(InitUploadRequest initUploadRequest) {
         // 1. 参数校验（提前暴露非法输入）
@@ -108,11 +122,24 @@ public class FileServiceImpl extends ServiceImpl<FileMapper, File> implements Fi
                 .collect(Collectors.toList()); // 把所有结果装进一个 List<String>
     }
 
+    /**
+     * 查询文件分片上传进度，获取已上传的分片索引集合
+     * 业务层无额外逻辑，直接透传调用MinIO工具类的底层实现
+     * @param fileHash 文件唯一哈希值
+     * @return 已上传分片的索引Set集合（天然去重），未上传则返回空Set
+     */
     @Override
     public Set<Integer> getUploadProgress(String fileHash) {
         return minioUtil.getChunkProgress(fileHash);
     }
 
+
+    /**
+     * 合并文件分片，完成分片上传最终业务流程
+     * 核心：调用MinIO底层合并分片 + 合并后文件信息持久化到数据库，形成业务闭环
+     * @param mergeChunkRequest 分片合并请求体，包含fileHash、chunkCount、fileType
+     * @return 合并后完整文件的MinIO访问URL
+     */
     @Override
     public String mergeChunk(MergeChunkRequest mergeChunkRequest) {
         String fileHash = mergeChunkRequest.getFileHash();
