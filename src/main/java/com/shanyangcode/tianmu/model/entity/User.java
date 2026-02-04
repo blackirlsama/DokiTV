@@ -1,4 +1,4 @@
-package com.shanyangcode.tianmu.entity;
+package com.shanyangcode.tianmu.model.entity;
 
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;

@@ -45,3 +45,10 @@ minio:
 
 netty:
   port: 9100
+
+rocketmq:
+  name-server: 172.18.124.35:9876
+  producer:
+    group: tianmuorange-producer-group
+  consumer:
+    group: tianmuorange-consumer-group

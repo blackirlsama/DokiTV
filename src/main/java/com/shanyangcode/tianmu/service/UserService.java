@@ -1,7 +1,7 @@
 package com.shanyangcode.tianmu.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.shanyangcode.tianmu.entity.User;
+import com.shanyangcode.tianmu.model.entity.User;
 import com.shanyangcode.tianmu.model.dto.user.LoginCodeRequest;
 import com.shanyangcode.tianmu.model.dto.user.LoginPasswordRequest;
 import com.shanyangcode.tianmu.model.dto.user.RegisterRequest;

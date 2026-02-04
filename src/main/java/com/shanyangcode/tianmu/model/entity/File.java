@@ -1,4 +1,4 @@
-package com.shanyangcode.tianmu.entity;
+package com.shanyangcode.tianmu.model.entity;
 
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -8,42 +8,41 @@ import lombok.Data;
 import java.io.Serializable;
 import java.util.Date;
 
+/**
+ * 文件表
+ * @TableName file
+ */
+@TableName(value ="`file`")
 @Data
-@TableName("user_stats")
-public class UserStats implements Serializable {
+public class File implements Serializable {
     /**
-     * id
+     * 文件 id
      */
     @TableId
-    private Long userId;
+    private Long fileId;
 
     /**
-     * 粉丝数
+     * 文件哈希值
      */
-    private Integer followers;
+    private String fileHash;
 
     /**
-     * 关注数
+     * 文件URL
      */
-    private Integer following;
+    private String fileUrl;
 
     /**
-     * 视频数
-     */
-    private Integer videoCount;
-
-    /**
-     * 创建时间
+     *
      */
     private Date createTime;
 
     /**
-     * 更新时间
+     *
      */
     private Date updateTime;
 
     /**
-     * 是否删除
+     * 删除标记
      */
     private Integer isDelete;
 

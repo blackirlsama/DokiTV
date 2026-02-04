@@ -1,8 +1,8 @@
 package com.shanyangcode.tianmu.model.vo.user;
 
-import lombok.Data;
-
 import java.io.Serializable;
+
+import lombok.Data;
 
 @Data
 public class UserInfoResponse implements Serializable {

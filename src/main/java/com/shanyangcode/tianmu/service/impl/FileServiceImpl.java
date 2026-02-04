@@ -14,7 +14,7 @@ import com.shanyangcode.tianmu.exception.ThrowUtils;
 import com.shanyangcode.tianmu.mapper.FileMapper;
 import com.shanyangcode.tianmu.model.dto.file.InitUploadRequest;
 import com.shanyangcode.tianmu.model.dto.file.MergeChunkRequest;
-import com.shanyangcode.tianmu.entity.File;
+import com.shanyangcode.tianmu.model.entity.File;
 import com.shanyangcode.tianmu.service.FileService;
 import com.shanyangcode.tianmu.utils.MinioUtil;
 import jakarta.annotation.Resource;
