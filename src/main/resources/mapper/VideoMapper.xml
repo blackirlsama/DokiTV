@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.shanyangcode.tianmu.mapper.VideoMapper">
+
+    <resultMap id="BaseResultMap" type="com.shanyangcode.tianmu.model.entity.Video">
+            <id property="videoId" column="video_id" jdbcType="BIGINT"/>
+            <result property="fileUrl" column="file_url" jdbcType="VARCHAR"/>
+            <result property="coverUrl" column="cover_url" jdbcType="VARCHAR"/>
+            <result property="userId" column="user_id" jdbcType="BIGINT"/>
+            <result property="title" column="title" jdbcType="VARCHAR"/>
+            <result property="type" column="type" jdbcType="TINYINT"/>
+            <result property="duration" column="duration" jdbcType="DOUBLE"/>
+            <result property="categoryId" column="category_id" jdbcType="INTEGER"/>
+            <result property="tags" column="tags" jdbcType="VARCHAR"/>
+            <result property="description" column="description" jdbcType="VARCHAR"/>
+            <result property="status" column="status" jdbcType="TINYINT"/>
+            <result property="createTime" column="create_time" jdbcType="TIMESTAMP"/>
+            <result property="updateTime" column="update_time" jdbcType="TIMESTAMP"/>
+            <result property="isDelete" column="is_delete" jdbcType="TINYINT"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        video_id,file_url,cover_url,
+        user_id,title,type,
+        duration,category_id,tags,
+        description,status,create_time,
+        update_time,is_delete
+    </sql>
+
+
+    <select id="selectVideoWithStats" resultType="com.shanyangcode.tianmu.model.vo.video.VideoListResponse">
+        SELECT v.video_id, vs.view_count, vs.bullet_count, v.user_id,
+        v.file_url, v.cover_url, v.duration,
+        v.title, v.create_time, u.nickname
+        FROM video v
+        LEFT JOIN video_stats vs ON v.video_id = vs.video_id
+        LEFT JOIN `user` u ON v.user_id = u.user_id
+        WHERE v.is_delete = 0
+        ORDER BY v.create_time ASC  <!-- 建议添加排序 -->
+        LIMIT #{current}, #{pageSize}
+    </select>
+
+    <select id="recommendVideoList" resultType="com.shanyangcode.tianmu.model.vo.video.VideoListResponse">
+        SELECT v.video_id, vs.view_count, vs.bullet_count, v.user_id,
+               v.file_url, v.cover_url, v.duration,
+               v.title, v.create_time, u.nickname
+        FROM video v
+                 LEFT JOIN video_stats vs ON v.video_id = vs.video_id
+                 LEFT JOIN `user` u ON v.user_id = u.user_id
+        WHERE v.is_delete = 0 and v.category_id = #{categoryId} and v.video_id != #{videoId}
+    </select>
+
+
+    <select id="getVideoDetails" resultType="com.shanyangcode.tianmu.model.vo.video.VideoDetailsResponse">
+        SELECT
+            v.video_id,
+            v.file_url,
+            v.user_id,
+            v.title,
+            v.type,
+            v.duration,
+            v.tags,
+            v.description,
+            v.create_time,
+            vs.view_count,
+            vs.bullet_count,
+            vs.like_count,
+            vs.coin_count,
+            vs.favorite_count,
+            vs.comment_count,
+            u.nickname,
+            u.avatar
+        FROM video v
+                 LEFT JOIN video_stats vs ON v.video_id = vs.video_id
+                 LEFT JOIN `user` u ON v.user_id = u.user_id
+        WHERE v.video_id = #{videoId}
+          AND v.is_delete = 0
+          AND u.is_delete = 0
+          AND v.status = 2;
+    </select>
+
+    <select id="getSubmitVideoList" resultType="com.shanyangcode.tianmu.model.vo.video.VideoListResponse">
+        SELECT v.video_id, vs.view_count, vs.bullet_count, v.user_id,
+               v.file_url, v.cover_url, v.duration,
+               v.title, v.create_time, u.nickname
+        FROM video v
+                 LEFT JOIN video_stats vs ON v.video_id = vs.video_id
+                 LEFT JOIN `user` u ON v.user_id = u.user_id
+        WHERE v.is_delete = 0 and v.user_id = #{userId}
+    </select>
+
+    <select id="getCategoryVideoList" resultType="com.shanyangcode.tianmu.model.vo.video.VideoListResponse">
+        SELECT v.video_id, vs.view_count, vs.bullet_count, v.user_id,
+               v.file_url, v.cover_url, v.duration,
+               v.title, v.create_time, u.nickname
+        FROM video v
+                 LEFT JOIN video_stats vs ON v.video_id = vs.video_id
+                 LEFT JOIN `user` u ON v.user_id = u.user_id
+        WHERE v.is_delete = 0 and v.category_id = #{categoryId}
+    </select>
+</mapper>

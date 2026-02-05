@@ -3,28 +3,29 @@ spring:
     name: tianmu
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/tianmu?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://120.76.96.24:3306/tianmu?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
     username: root
-    password: 080355  # enter your password
+    password: gK3T9n%q2M@j7Z9
 
-data:
-  redis:
-    database: 15    # Redis 数据库索引（0-15，默认 0）
-    host: 127.0.0.1 # Redis 服务器地址
-    port: 6379      # Redis 服务器端口
-    timeout: 2000   # 客户端与 Redis 服务器建立连接的最大等待时间
-    #    password: e65K4t8w2 # Redis 服务器密码（当前未启用）
-    # 配置 redis 连接池
-    lettuce:
-      pool:
-        # 链接池中最小的空闲链接 默认为 0
-        min-idle: 4
-        # 链接池中最大的空闲连接 默认为 8
-        max-idle: 8
-        #连接池中最大数据库链接数 默认为 8
-        max-active: 8
-        #连接池最大阻塞等待时间
-        max-wait: 5000ms
+  data:
+    redis:
+      database: 15
+      host: 47.115.130.44
+      port: 59000
+      timeout: 50000
+      password: e65K4t8w2
+      #    password: e65K4t8w2 # Redis 服务器密码（当前未启用）
+      # 配置 redis 连接池
+      lettuce:
+        pool:
+          # 链接池中最小的空闲链接 默认为 0
+          min-idle: 4
+          # 链接池中最大的空闲连接 默认为 8
+          max-idle: 8
+          #连接池中最大数据库链接数 默认为 8
+          max-active: 8
+          #连接池最大阻塞等待时间
+          max-wait: 5000ms
 
 mybatis-plus:
   configuration:
@@ -37,7 +38,7 @@ mybatis-plus:
       logic-not-delete-value: 0 # 逻辑未删除值（默认为 0）
 
 minio:
-  url: http://127.0.0.1:9000
+  url: http://120.76.96.24:9000
   access-key: minioadmin
   secret-key: minioadmin
   bucket-name: tianmu-upload
@@ -46,9 +47,12 @@ minio:
 netty:
   port: 9100
 
+
 rocketmq:
-  name-server: 172.18.124.35:9876
+  name-server: 120.76.96.24:9876
   producer:
-    group: tianmuorange-producer-group
+    group: zzz-producer-group
   consumer:
-    group: tianmuorange-consumer-group
+    group: zzz-consumer-group
+server:
+  port: 8101
