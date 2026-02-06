@@ -10,13 +10,20 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * Redisson配置类，用于配置和创建Redisson客户端实例
+ * 通过@Configuration注解标记为配置类，通过@ConfigurationProperties注解绑定配置文件中的属性
+ */
 @Configuration
 @ConfigurationProperties(prefix = "data.redis")
 @Data
 public class RedissonConfig {
 
+    // Redis服务器主机地址
     private String host;
+    // Redis服务器端口，默认为6379
     private Integer port = 6379;
+    // Redis数据库编号，默认为0
     private Integer database = 0;
     private String password = ""; // 空字符串，适配无密码Redis
     private Integer timeout = 2000;

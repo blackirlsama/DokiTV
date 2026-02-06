@@ -26,29 +26,52 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 
+/**
+ * 点赞服务实现类
+ * 继承 ServiceImpl<LikeMapper, Like> 提供基础 CRUD 操作
+ * 实现 LikeService 接口定义的业务方法
+ */
 @Service
 public class LikeServiceImpl extends ServiceImpl<LikeMapper, Like>
     implements LikeService {
 
 
+    /**
+     * 注入视频服务
+     */
     @Resource
     private VideoService videoService;
 
+    /**
+     * 注入视频统计服务
+     */
     @Resource
     private VideoStatsService videoStatsService;
 
+    /**
+     * 注入用户服务
+     */
     @Resource
     private UserService userService;
 
+    /**
+     * 注入计数工具类
+     */
     @Resource
     private CounterUtil counterUtil;
 
 
+    /**
+     * 点赞视频方法
+     * @param videoActionRequest 包含用户ID和视频ID的请求对象
+     * @return 返回点赞记录ID
+     * @Transactional 声明式事务，发生异常时回滚
+     */
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class)  // 声明式事务注解，表示该方法发生任何异常时都会回滚事务
     public Long likeVideo(VideoActionRequest videoActionRequest) {
 
-         //检测点赞频率是否过快
+         //检测点赞频率是否过快，防止恶意刷赞
         crawlerLikeDetect(videoActionRequest);
 
          //校验判断视频是否存在
@@ -66,6 +89,7 @@ public class LikeServiceImpl extends ServiceImpl<LikeMapper, Like>
         Like likeVideo = new Like();
         likeVideo.setVideoId(videoActionRequest.getVideoId());
         likeVideo.setUserId(videoActionRequest.getUserId());
+        // 使用雪花算法生成唯一ID
         Snowflake snowflake = IdUtil.getSnowflake(SnowflakeConstant.WORKER_ID, SnowflakeConstant.DATA_CENTER_ID);
         likeVideo.setLikeId(snowflake.nextId());
         boolean save = this.save(likeVideo);
@@ -83,6 +107,12 @@ public class LikeServiceImpl extends ServiceImpl<LikeMapper, Like>
 
 
 
+    /**
+     * 取消点赞视频方法
+     * @param cancelVideoActionRequest 包含点赞ID和视频ID的请求对象
+     * @return 操作结果，成功返回true
+     * @Transactional 声明式事务，发生异常时回滚
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean cancelLikeVideo(CancelVideoActionRequest cancelVideoActionRequest) {
@@ -101,6 +131,11 @@ public class LikeServiceImpl extends ServiceImpl<LikeMapper, Like>
     }
 
 
+    /**
+     * 点赞频率检测方法
+     * 用于防止恶意刷赞，限制用户对同一视频的点赞频率
+     * @param videoActionRequest 包含用户ID和视频ID的请求对象
+     */
     private void crawlerLikeDetect(VideoActionRequest videoActionRequest) {
         // 调用多少次时告警
         final int WARN_COUNT = 2;
