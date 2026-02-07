@@ -4,15 +4,18 @@ import java.util.Collections;
 import java.util.List;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.shanyangcode.tianmu.common.ErrorCode;
 import com.shanyangcode.tianmu.constants.SnowflakeConstant;
+import com.shanyangcode.tianmu.exception.BusinessException;
 import com.shanyangcode.tianmu.exception.ThrowUtils;
 import com.shanyangcode.tianmu.mapper.VideoMapper;
 import com.shanyangcode.tianmu.model.dto.video.VideoActionRequest;
 import com.shanyangcode.tianmu.model.dto.video.VideoSubmitRequest;
 import com.shanyangcode.tianmu.model.entity.*;
 import com.shanyangcode.tianmu.model.vo.bullet.OnlineBulletResponse;
+import com.shanyangcode.tianmu.model.vo.video.TripleActionResponse;
 import com.shanyangcode.tianmu.model.vo.video.VideoDetailsResponse;
 import com.shanyangcode.tianmu.model.vo.video.VideoListResponse;
 import com.shanyangcode.tianmu.model.vo.video.VideoResponse;
@@ -23,6 +26,7 @@ import cn.hutool.core.lang.Snowflake;
 import cn.hutool.core.util.IdUtil;
 import jakarta.annotation.Resource;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,7 +64,17 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video>
     private BulletService bulletService;
 
 
+    @Resource
+    @Lazy
+    private LikeService likeService;
 
+    @Resource
+    @Lazy
+    private  FavoriteService favoriteService;
+
+    @Resource
+    @Lazy
+    private CoinService coinService;
 
 
     @Override
@@ -209,6 +223,82 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video>
         return videoMapper.getCategoryVideoList(categoryId);
     }
 
+
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TripleActionResponse tripleAction(VideoActionRequest videoActionRequest) {
+        // 1. 校验用户和视频
+        Long vid = videoActionRequest.getVideoId();
+        Long uid = videoActionRequest.getUserId();
+
+        boolean videoExists = this.lambdaQuery().eq(Video::getVideoId, vid).exists();
+        ThrowUtils.throwIf(!videoExists, ErrorCode.VIDEO_NOT_FOUND_ERROR);
+
+        User user = userService.lambdaQuery().eq(User::getUserId, uid).one();
+
+        UserStats userStats = userStatsService.lambdaQuery().eq(UserStats::getUserId, uid).one();
+
+        ThrowUtils.throwIf(user == null, ErrorCode.USER_NOT_EXISTS);
+
+        ThrowUtils.throwIf(userStats.getCoinCount() < 1, ErrorCode.USER_COIN_ERROR);
+
+        // 2. 查询是否已三连（1次查询优化）
+        boolean hasLiked = likeService.lambdaQuery().eq(Like::getVideoId, videoActionRequest.getVideoId()).eq(Like::getUserId, videoActionRequest.getUserId()).exists();
+        boolean hasFavorite = favoriteService.lambdaQuery().eq(Favorite::getVideoId, videoActionRequest.getVideoId()).eq(Favorite::getUserId, videoActionRequest.getUserId()).exists();
+        boolean hasCoined = coinService.lambdaQuery().eq(Coin::getVideoId, videoActionRequest.getVideoId()).eq(Coin::getUserId, videoActionRequest.getUserId()).exists();
+
+        // 3. 执行三连操作
+        TripleActionResponse response = new TripleActionResponse();
+        Snowflake snowflake = IdUtil.getSnowflake(SnowflakeConstant.WORKER_ID, SnowflakeConstant.DATA_CENTER_ID);
+        LambdaUpdateWrapper<VideoStats> statsUpdate = new LambdaUpdateWrapper<VideoStats>().eq(VideoStats::getVideoId, vid);
+
+        // 点赞
+        if (!hasLiked) {
+            Like like = new Like();
+            like.setVideoId(vid);
+            like.setUserId(uid);
+            like.setLikeId(snowflake.nextId());
+            ThrowUtils.throwIf(!likeService.save(like), ErrorCode.SYSTEM_ERROR);
+            response.setLikeId(like.getLikeId());
+            statsUpdate.setSql("like_count = like_count + 1");
+        }
+
+        // 收藏
+        if (!hasFavorite) {
+            Favorite favorite = new Favorite();
+            favorite.setVideoId(vid);
+            favorite.setUserId(uid);
+            favorite.setFavoriteId(snowflake.nextId());
+            ThrowUtils.throwIf(!favoriteService.save(favorite), ErrorCode.SYSTEM_ERROR);
+            response.setFavoriteId(favorite.getFavoriteId());
+            statsUpdate.setSql("favorite_count = favorite_count + 1");
+        }
+
+        // 投币（原子扣减）
+        if (!hasCoined) {
+            Coin coin = new Coin();
+            coin.setVideoId(vid);
+            coin.setUserId(uid);
+            coin.setCoinId(snowflake.nextId());
+            ThrowUtils.throwIf(!coinService.save(coin), ErrorCode.SYSTEM_ERROR);
+
+            boolean coinDeducted = userStatsService.lambdaUpdate().setSql("coin_count = coin_count - 1").eq(UserStats::getUserId, uid).update();
+            ThrowUtils.throwIf(!coinDeducted, ErrorCode.USER_COIN_ERROR, "投币失败，硬币不足");
+
+            response.setCoin(true);
+            statsUpdate.setSql("coin_count = coin_count + 1");
+        }
+
+        // 4. 更新视频统计
+        if (hasLiked && hasFavorite && hasCoined) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "您已经三连过了");
+        }
+        boolean statsUpdated = videoStatsService.update(statsUpdate);
+        ThrowUtils.throwIf(!statsUpdated, ErrorCode.SYSTEM_ERROR, "更新视频统计失败");
+
+        return response;
+    }
 
 
 

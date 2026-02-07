@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Configuration;
  * 通过@Configuration注解标记为配置类，通过@ConfigurationProperties注解绑定配置文件中的属性
  */
 @Configuration
-@ConfigurationProperties(prefix = "data.redis")
+@ConfigurationProperties(prefix = "spring.data.redis")
 @Data
 public class RedissonConfig {
 

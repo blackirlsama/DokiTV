@@ -5,14 +5,11 @@ import java.util.List;
 import com.shanyangcode.tianmu.common.BaseResponse;
 import com.shanyangcode.tianmu.common.ResultUtils;
 import com.shanyangcode.tianmu.model.dto.video.CancelVideoActionRequest;
+import com.shanyangcode.tianmu.model.dto.video.CreateCommentRequest;
 import com.shanyangcode.tianmu.model.dto.video.VideoActionRequest;
 import com.shanyangcode.tianmu.model.dto.video.VideoSubmitRequest;
-import com.shanyangcode.tianmu.model.vo.video.VideoListResponse;
-import com.shanyangcode.tianmu.model.vo.video.VideoResponse;
-import com.shanyangcode.tianmu.service.CoinService;
-import com.shanyangcode.tianmu.service.FavoriteService;
-import com.shanyangcode.tianmu.service.LikeService;
-import com.shanyangcode.tianmu.service.VideoService;
+import com.shanyangcode.tianmu.model.vo.video.*;
+import com.shanyangcode.tianmu.service.*;
 
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
@@ -35,6 +32,9 @@ public class VideoController {
 
     @Resource
     private FavoriteService favoriteService;
+
+    @Resource
+    private CommentService commentService;
 
     @PostMapping("/submit")
     public BaseResponse<Boolean> submit(@RequestParam String fileUrl, @RequestParam Long userId, @RequestParam MultipartFile file, @RequestParam String title, @RequestParam Integer type, @RequestParam Double duration, @RequestParam Integer categoryId, @RequestParam String tags, @RequestParam String description) throws Exception {
@@ -89,4 +89,25 @@ public class VideoController {
         return ResultUtils.success(favoriteService.cancelFavoriteVideo(cancelVideoActionRequest));
     }
 
+    @PostMapping("/create/comment")
+    public BaseResponse<CommentResponse> createCommentVideo(@Valid @RequestBody CreateCommentRequest createCommentRequest) {
+        return ResultUtils.success(commentService.createCommentVideo(createCommentRequest));
+    }
+
+    @PostMapping("/delete/comment")
+    public BaseResponse<Boolean> deleteCommentVideo(@Valid @RequestBody CancelVideoActionRequest cancelVideoActionRequest) {
+        return ResultUtils.success(commentService.deleteCommentVideo(cancelVideoActionRequest));
+    }
+
+
+    @GetMapping("/comment/list")
+    public BaseResponse<List<CommentVideoResponse>> getCommentVideoList(@Valid @NotEmpty(message = "视频ID不能为空") @RequestParam Long videoId) {
+        return ResultUtils.success(commentService.getCommentVideoList(videoId));
+    }
+
+
+    @PostMapping("/triple/action")
+    public BaseResponse<TripleActionResponse> tripleAction(@Valid @RequestBody VideoActionRequest videoActionRequest) {
+        return ResultUtils.success(videoService.tripleAction(videoActionRequest));
+    }
 }

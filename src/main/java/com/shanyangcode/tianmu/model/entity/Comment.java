@@ -1,29 +1,27 @@
 package com.shanyangcode.tianmu.model.entity;
 
+import java.io.Serializable;
+import java.util.Date;
 
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+
 import lombok.Data;
 
-import java.io.Serial;
-import java.io.Serializable;
-import java.util.Date;
-
 /**
- * 弹幕表
- * @TableName bullet
+ * 评论表
+ * @TableName comment
  */
-@TableName(value ="bullet")
+@TableName(value ="`comment`")
 @Data
-public class Bullet implements Serializable {
-
-    
+@SuppressWarnings({"all"})
+public class Comment implements Serializable {
     /**
-     * 弹幕ID
+     * 评论ID
      */
     @TableId
-    private Long bulletId;
+    private Long commentId;
 
     /**
      * 视频ID
@@ -31,31 +29,25 @@ public class Bullet implements Serializable {
     private Long videoId;
 
     /**
-     * 用户ID
+     * 评论用户ID
      */
     private Long userId;
 
     /**
-     * 弹幕内容
+     * 父评论ID
+     */
+    private Long parentCommentId;
+
+    /**
+     * 评论内容
      */
     private String content;
 
     /**
-     * 弹幕颜色 6位十六进制标准格式
-     */
-    private String color;
-
-    /**
-     * 弹幕所在视频的时间点
-     */
-    private Double playbackTime;
-
-    /**
-     * 日期
+     * 
      */
     private Date createTime;
 
     @TableField(exist = false)
-    @Serial
     private static final long serialVersionUID = 1L;
 }
