@@ -225,53 +225,73 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video>
 
 
 
+/**
+ * 执行视频三连操作（点赞、收藏、投币）
+ * @param videoActionRequest 包含用户ID和视频ID的请求对象
+ * @return TripleActionResponse 包含操作结果的响应对象
+ * @throws BusinessException 当操作失败或不符合条件时抛出
+ */
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class) // 声明事务，确保所有操作要么全部成功，要么全部回滚
     public TripleActionResponse tripleAction(VideoActionRequest videoActionRequest) {
         // 1. 校验用户和视频
-        Long vid = videoActionRequest.getVideoId();
-        Long uid = videoActionRequest.getUserId();
+        Long vid = videoActionRequest.getVideoId(); // 获取视频ID
+        Long uid = videoActionRequest.getUserId(); // 获取用户ID
 
+    // 检查视频是否存在
         boolean videoExists = this.lambdaQuery().eq(Video::getVideoId, vid).exists();
         ThrowUtils.throwIf(!videoExists, ErrorCode.VIDEO_NOT_FOUND_ERROR);
 
+    // 查询用户信息
         User user = userService.lambdaQuery().eq(User::getUserId, uid).one();
 
+    // 查询用户统计信息（主要是硬币数量）
         UserStats userStats = userStatsService.lambdaQuery().eq(UserStats::getUserId, uid).one();
 
+    // 校验用户是否存在
         ThrowUtils.throwIf(user == null, ErrorCode.USER_NOT_EXISTS);
 
+    // 校验用户是否有足够的硬币进行投币
         ThrowUtils.throwIf(userStats.getCoinCount() < 1, ErrorCode.USER_COIN_ERROR);
 
         // 2. 查询是否已三连（1次查询优化）
+    // 检查用户是否已点赞
         boolean hasLiked = likeService.lambdaQuery().eq(Like::getVideoId, videoActionRequest.getVideoId()).eq(Like::getUserId, videoActionRequest.getUserId()).exists();
+    // 检查用户是否已收藏
         boolean hasFavorite = favoriteService.lambdaQuery().eq(Favorite::getVideoId, videoActionRequest.getVideoId()).eq(Favorite::getUserId, videoActionRequest.getUserId()).exists();
+    // 检查用户是否已投币
         boolean hasCoined = coinService.lambdaQuery().eq(Coin::getVideoId, videoActionRequest.getVideoId()).eq(Coin::getUserId, videoActionRequest.getUserId()).exists();
 
         // 3. 执行三连操作
-        TripleActionResponse response = new TripleActionResponse();
+        TripleActionResponse response = new TripleActionResponse(); // 创建响应对象
+    // 雪花ID生成器，用于生成唯一ID
         Snowflake snowflake = IdUtil.getSnowflake(SnowflakeConstant.WORKER_ID, SnowflakeConstant.DATA_CENTER_ID);
+    // 创建视频统计更新的条件构造器
         LambdaUpdateWrapper<VideoStats> statsUpdate = new LambdaUpdateWrapper<VideoStats>().eq(VideoStats::getVideoId, vid);
 
-        // 点赞
+        // 点赞操作
         if (!hasLiked) {
-            Like like = new Like();
-            like.setVideoId(vid);
-            like.setUserId(uid);
-            like.setLikeId(snowflake.nextId());
+            Like like = new Like(); // 创建点赞记录
+            like.setVideoId(vid); // 设置视频ID
+            like.setUserId(uid); // 设置用户ID
+            like.setLikeId(snowflake.nextId()); // 生成点赞ID
+        // 保存点赞记录，失败则抛出异常
             ThrowUtils.throwIf(!likeService.save(like), ErrorCode.SYSTEM_ERROR);
-            response.setLikeId(like.getLikeId());
+            response.setLikeId(like.getLikeId()); // 在响应中设置点赞ID
+        // 更新视频点赞数统计
             statsUpdate.setSql("like_count = like_count + 1");
         }
 
-        // 收藏
+        // 收藏操作
         if (!hasFavorite) {
-            Favorite favorite = new Favorite();
-            favorite.setVideoId(vid);
-            favorite.setUserId(uid);
-            favorite.setFavoriteId(snowflake.nextId());
+            Favorite favorite = new Favorite(); // 创建收藏记录
+            favorite.setVideoId(vid); // 设置视频ID
+            favorite.setUserId(uid); // 设置用户ID
+            favorite.setFavoriteId(snowflake.nextId()); // 生成收藏ID
+        // 保存收藏记录，失败则抛出异常
             ThrowUtils.throwIf(!favoriteService.save(favorite), ErrorCode.SYSTEM_ERROR);
-            response.setFavoriteId(favorite.getFavoriteId());
+            response.setFavoriteId(favorite.getFavoriteId()); // 在响应中设置收藏ID
+        // 更新视频收藏数统计
             statsUpdate.setSql("favorite_count = favorite_count + 1");
         }
 

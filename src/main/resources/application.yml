@@ -7,6 +7,13 @@ spring:
     username: root
     password: 080355
 
+  elasticsearch:
+    uris: http://localhost:9200  # 你的ES地址
+    username: elastic      # 如果有认证
+    password: tianmu
+    connection-timeout: 5s
+    socket-timeout: 30s
+
   data:
     redis:
       database: 15
@@ -46,6 +53,7 @@ minio:
 
 netty:
   port: 9100
+
 
 
 rocketmq:
