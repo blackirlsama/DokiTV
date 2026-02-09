@@ -3,9 +3,9 @@ spring:
     name: tianmu
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:3306/tianmu?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://127.0.0.1:3307/tianmu?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
     username: root
-    password: 080355
+    password: gK3T9n%q2M@j7Z9
 
   elasticsearch:
     uris: http://localhost:9200  # 你的ES地址
@@ -13,6 +13,7 @@ spring:
     password: tianmu
     connection-timeout: 5s
     socket-timeout: 30s
+
 
   data:
     redis:
@@ -64,3 +65,18 @@ rocketmq:
     group: zzz-consumer-group
 server:
   port: 8101
+
+canal:
+  server:
+    host: 127.0.0.1
+    port: 11111
+  destination: example
+  username: canal
+  password: canal
+  filter: ".*\\..*"
+  client:
+    heartbeat:
+      interval: 2000    # 心跳间隔(毫秒)
+      timeout: 3000    # 心跳超时(毫秒)
+    socket:
+      timeout: 6000    # socket超时(毫秒)
