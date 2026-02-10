@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.shanyangcode.tianmu.model.entity.Video;
+import com.shanyangcode.tianmu.model.vo.video.FavoriteVideoResponse;
 import com.shanyangcode.tianmu.model.vo.video.VideoDetailsResponse;
 import com.shanyangcode.tianmu.model.vo.video.VideoListResponse;
 
@@ -29,6 +30,13 @@ public interface VideoMapper extends BaseMapper<Video> {
 
 
     List<VideoListResponse> getCategoryVideoList(Integer categoryId);
+
+
+    List<VideoListResponse> getLikeVideoList(Long userId);
+
+    List<VideoListResponse> getCoinVideoList(Long userId);
+
+    List<FavoriteVideoResponse> getFavoriteVideoList(Long userId);
 }
 
 

@@ -7,19 +7,13 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
+
     @Autowired
     private JWTInterceptor jwtInterceptor;
+
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        /*// 拦截所有请求
-        registry.addInterceptor(jwtInterceptor).addPathPatterns("/**")
-                // 可以在这里排除一些不需要拦截的路径
-                .excludePathPatterns("/api/user/sendVerificationCode", "/api/user/register", "/api/user/info",
-                        "/api/user/loginCode", "/api/user/getCode","/api/user/focus/list",
-                        "/api/user/fans/list", "/api/user/loginPassword", "/api/file/check", "/api/file/get/upload/urls",
-                        "/api/file/get/upload/progress", "/api/file/merge/chunk", "/api/video/list",
-                        "/api/video/detail", "/api/video/comment/list", "/api/video/submit/list",
-                        "/api/video/coin/list", "/api/video/like/list", "/api/video/favorite/list",
-                        "/api/category", "/api/category/list");*/
+        registry.addInterceptor(jwtInterceptor)
+                .addPathPatterns("/**");
     }
 }

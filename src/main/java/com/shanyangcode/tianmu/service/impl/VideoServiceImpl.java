@@ -17,10 +17,7 @@ import com.shanyangcode.tianmu.model.dto.video.VideoActionRequest;
 import com.shanyangcode.tianmu.model.dto.video.VideoSubmitRequest;
 import com.shanyangcode.tianmu.model.entity.*;
 import com.shanyangcode.tianmu.model.vo.bullet.OnlineBulletResponse;
-import com.shanyangcode.tianmu.model.vo.video.TripleActionResponse;
-import com.shanyangcode.tianmu.model.vo.video.VideoDetailsResponse;
-import com.shanyangcode.tianmu.model.vo.video.VideoListResponse;
-import com.shanyangcode.tianmu.model.vo.video.VideoResponse;
+import com.shanyangcode.tianmu.model.vo.video.*;
 import com.shanyangcode.tianmu.service.*;
 import com.shanyangcode.tianmu.utils.BitMapBloomUtil;
 import com.shanyangcode.tianmu.utils.MinioUtil;
@@ -410,7 +407,20 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video>
         return response;
     }
 
+    @Override
+    public List<FavoriteVideoResponse> getFavoriteVideoList(Long userId) {
+        return videoMapper.getFavoriteVideoList(userId);
+    }
 
+    @Override
+    public List<VideoListResponse> getLikeVideoList(Long userId) {
+        return videoMapper.getLikeVideoList(userId);
+    }
+
+    @Override
+    public List<VideoListResponse> getCoinVideoList(Long userId) {
+        return videoMapper.getCoinVideoList(userId);
+    }
 
 }
 

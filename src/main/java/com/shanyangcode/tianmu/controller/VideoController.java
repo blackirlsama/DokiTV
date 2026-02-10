@@ -13,12 +13,12 @@ import com.shanyangcode.tianmu.service.*;
 
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
-@RequestMapping("/api/video")
+@RequestMapping("/video")
 public class VideoController {
 
     @Resource
@@ -56,58 +56,75 @@ public class VideoController {
 
 
     @GetMapping("/submit/list")
-    public BaseResponse<List<VideoListResponse>> submitVideoList(@Valid @NotEmpty(message = "用户ID不能为空") @RequestParam Long userId) {
+    public BaseResponse<List<VideoListResponse>> submitVideoList(@Valid @NotNull(message = "用户ID不能为空") @RequestParam Long userId) {
         return ResultUtils.success(videoService.getSubmitVideoList(userId));
     }
 
     @PostMapping("/like")
-    public BaseResponse<Long> likeVideo(@Valid @RequestBody VideoActionRequest videoActionRequest) {
+    public BaseResponse<Long> likeVideo(@RequestBody VideoActionRequest videoActionRequest) {
         return ResultUtils.success(likeService.likeVideo(videoActionRequest));
     }
 
 
     @PostMapping("/cancel/like")
-    public BaseResponse<Boolean> cancelLikeVideo(@Valid @RequestBody CancelVideoActionRequest cancelVideoActionRequest) {
+    public BaseResponse<Boolean> cancelLikeVideo(@RequestBody CancelVideoActionRequest cancelVideoActionRequest) {
         return ResultUtils.success(likeService.cancelLikeVideo(cancelVideoActionRequest));
     }
 
 
 
     @PostMapping("/coin")
-    public BaseResponse<Boolean> coinVideo(@Valid @RequestBody VideoActionRequest videoActionRequest) {
+    public BaseResponse<Boolean> coinVideo( @RequestBody VideoActionRequest videoActionRequest) {
         return ResultUtils.success(coinService.coinVideo(videoActionRequest));
     }
 
 
     @PostMapping("/favorite")
-    public BaseResponse<Long> favoriteVideo(@Valid @RequestBody VideoActionRequest videoActionRequest) {
+    public BaseResponse<Long> favoriteVideo(@RequestBody VideoActionRequest videoActionRequest) {
         return ResultUtils.success(favoriteService.favoriteVideo(videoActionRequest));
     }
 
-    @PostMapping("/video/cancel/favorite")
-    public BaseResponse<Boolean> cancelFavoriteVideo(@Valid @RequestBody CancelVideoActionRequest cancelVideoActionRequest) {
+    @PostMapping("/cancel/favorite")
+    public BaseResponse<Boolean> cancelFavoriteVideo(@RequestBody CancelVideoActionRequest cancelVideoActionRequest) {
         return ResultUtils.success(favoriteService.cancelFavoriteVideo(cancelVideoActionRequest));
     }
 
     @PostMapping("/create/comment")
-    public BaseResponse<CommentResponse> createCommentVideo(@Valid @RequestBody CreateCommentRequest createCommentRequest) {
+    public BaseResponse<CommentResponse> createCommentVideo(@RequestBody CreateCommentRequest createCommentRequest) {
         return ResultUtils.success(commentService.createCommentVideo(createCommentRequest));
     }
 
     @PostMapping("/delete/comment")
-    public BaseResponse<Boolean> deleteCommentVideo(@Valid @RequestBody CancelVideoActionRequest cancelVideoActionRequest) {
+    public BaseResponse<Boolean> deleteCommentVideo(@RequestBody CancelVideoActionRequest cancelVideoActionRequest) {
         return ResultUtils.success(commentService.deleteCommentVideo(cancelVideoActionRequest));
     }
 
 
     @GetMapping("/comment/list")
-    public BaseResponse<List<CommentVideoResponse>> getCommentVideoList(@Valid @NotEmpty(message = "视频ID不能为空") @RequestParam Long videoId) {
+    public BaseResponse<List<CommentVideoResponse>> getCommentVideoList(@NotNull(message = "视频ID不能为空") @RequestParam Long videoId) {
         return ResultUtils.success(commentService.getCommentVideoList(videoId));
     }
 
 
     @PostMapping("/triple/action")
-    public BaseResponse<TripleActionResponse> tripleAction(@Valid @RequestBody VideoActionRequest videoActionRequest) {
+    public BaseResponse<TripleActionResponse> tripleAction(@RequestBody VideoActionRequest videoActionRequest) {
         return ResultUtils.success(videoService.tripleAction(videoActionRequest));
+    }
+
+
+
+    @GetMapping("/favorite/list")
+    public BaseResponse<List<FavoriteVideoResponse>> favoriteVideoList(@Valid @NotNull(message = "用户ID不能为空") @RequestParam Long userId) {
+        return ResultUtils.success(videoService.getFavoriteVideoList(userId));
+    }
+
+    @GetMapping("/like/list")
+    public BaseResponse<List<VideoListResponse>> likeVideoList(@Valid @NotNull(message = "用户ID不能为空") @RequestParam Long userId) {
+        return ResultUtils.success(videoService.getLikeVideoList(userId));
+    }
+
+    @GetMapping("/coin/list")
+    public BaseResponse<List<VideoListResponse>> coinVideoList(@Valid @NotNull(message = "用户ID不能为空") @RequestParam Long userId) {
+        return ResultUtils.success(videoService.getCoinVideoList(userId));
     }
 }

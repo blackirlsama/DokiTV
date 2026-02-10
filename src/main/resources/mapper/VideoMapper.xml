@@ -100,4 +100,48 @@
                  LEFT JOIN `user` u ON v.user_id = u.user_id
         WHERE v.is_delete = 0 and v.category_id = #{categoryId}
     </select>
+
+
+
+    <select id="getLikeVideoList" resultType="com.shanyangcode.tianmu.model.vo.video.VideoListResponse">
+        SELECT v.video_id, vs.view_count, vs.bullet_count, v.user_id,
+               v.file_url, v.cover_url, v.duration,
+               v.title, v.create_time, u.nickname
+        FROM video v
+                 LEFT JOIN video_stats vs ON v.video_id = vs.video_id
+                 LEFT JOIN `user` u ON v.user_id = u.user_id
+                 LEFT JOIN `like` lv ON v.video_id = lv.video_id
+        WHERE v.is_delete = 0 and lv.user_id = #{userId}
+    </select>
+
+
+
+    <select id="getCoinVideoList" resultType="com.shanyangcode.tianmu.model.vo.video.VideoListResponse">
+        SELECT v.video_id, vs.view_count, vs.bullet_count, v.user_id,
+               v.file_url, v.cover_url, v.duration,
+               v.title, v.create_time, u.nickname
+        FROM video v
+                 LEFT JOIN video_stats vs ON v.video_id = vs.video_id
+                 LEFT JOIN `user` u ON v.user_id = u.user_id
+                 LEFT JOIN coin cv ON v.video_id = cv.video_id
+        WHERE v.is_delete = 0 and cv.user_id = #{userId}
+    </select>
+
+
+
+    <select id="getFavoriteVideoList" resultType="com.shanyangcode.tianmu.model.vo.video.FavoriteVideoResponse">
+        SELECT
+            v.video_id, vs.view_count, vs.bullet_count, v.user_id,
+            v.file_url, v.cover_url, v.duration,
+            v.title, v.create_time, u.nickname,
+            fv.create_time AS favorite_time  -- 新增收藏时间字段
+        FROM video v
+                 LEFT JOIN video_stats vs ON v.video_id = vs.video_id
+                 LEFT JOIN `user` u ON v.user_id = u.user_id
+                 LEFT JOIN favorite fv ON v.video_id = fv.video_id  -- 新增关联收藏表
+        WHERE
+            v.is_delete = 0 and fv.user_id = #{userId}
+        ORDER BY
+            fv.create_time DESC;  -- 主查询排序
+    </select>
 </mapper>

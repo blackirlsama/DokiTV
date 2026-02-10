@@ -1,7 +1,7 @@
 package com.shanyangcode.tianmu.service.impl;
 
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.util.IdUtil;
+import java.util.concurrent.TimeUnit;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -9,29 +9,35 @@ import com.shanyangcode.tianmu.common.ErrorCode;
 import com.shanyangcode.tianmu.constants.JWTConstant;
 import com.shanyangcode.tianmu.constants.SMSConstant;
 import com.shanyangcode.tianmu.constants.UserConstant;
-import com.shanyangcode.tianmu.model.entity.User;
-import com.shanyangcode.tianmu.model.entity.UserStats;
 import com.shanyangcode.tianmu.exception.BusinessException;
 import com.shanyangcode.tianmu.exception.ThrowUtils;
 import com.shanyangcode.tianmu.mapper.UserMapper;
 import com.shanyangcode.tianmu.model.dto.user.LoginCodeRequest;
 import com.shanyangcode.tianmu.model.dto.user.LoginPasswordRequest;
 import com.shanyangcode.tianmu.model.dto.user.RegisterRequest;
+import com.shanyangcode.tianmu.model.dto.user.UserInfoRequest;
+import com.shanyangcode.tianmu.model.entity.User;
+import com.shanyangcode.tianmu.model.entity.UserStats;
 import com.shanyangcode.tianmu.model.vo.user.LoginResponse;
+import com.shanyangcode.tianmu.model.vo.user.UserInfoResponse;
+import com.shanyangcode.tianmu.service.FollowService;
 import com.shanyangcode.tianmu.service.UserService;
 import com.shanyangcode.tianmu.service.UserStatsService;
 import com.shanyangcode.tianmu.utils.JwtUtil;
 import com.shanyangcode.tianmu.utils.RandomCodeUtil;
 import com.shanyangcode.tianmu.utils.SendMailUtil;
+
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.IdUtil;
+import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.DigestUtils;
-
-import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
@@ -41,6 +47,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Autowired
     private UserStatsService userStatsService;
+
+    @Resource
+    @Lazy
+    private FollowService followService;
+
+
     @Override
     public void sendVerificationCode(String account) {
         // check corner case
@@ -69,7 +81,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         validateRegisterRequest(registerRequest);
 
         // 2. 验证码校验
-        validateVerificationCode(registerRequest.getAccount(), registerRequest.getVerificationCode());
+        validateVerificationCode(registerRequest.getAccount(), registerRequest.getCode());
 
         // 3. 检查用户是否已存在
         checkUserExistence(registerRequest.getAccount());
@@ -264,4 +276,31 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         return user;
     }
+
+
+    @Override
+    public UserInfoResponse getUserInfo(UserInfoRequest userInfoRequest) {
+        // 查询用户信息判断用户是否存在
+        User user = this.getById(userInfoRequest.getCreatorId());
+        ThrowUtils.throwIf(user == null, ErrorCode.USER_NOT_EXISTS);
+
+        // 用户基本信息
+        UserInfoResponse userInfoResponse = new UserInfoResponse();
+        BeanUtil.copyProperties(user, userInfoResponse);
+
+        // 用户统计信息
+        UserStats userStats = userStatsService.getById(userInfoRequest.getCreatorId());
+        BeanUtil.copyProperties(userStats, userInfoResponse);
+
+        userInfoResponse.setFollow(followService.getFollowType(userInfoRequest.getUserId(), userInfoRequest.getCreatorId()));
+
+        return userInfoResponse;
+    }
+
+    @Override
+    public boolean userLogout(Long userId, HttpServletRequest request) {
+        stringRedisTemplate.delete(userId.toString());
+        return true;
+    }
+
 }

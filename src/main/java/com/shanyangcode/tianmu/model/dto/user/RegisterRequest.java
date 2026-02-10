@@ -9,7 +9,7 @@ public class RegisterRequest {
 
     private String password;
 
-    private String verificationCode;
+    private String code;
 
     private String nickname;
 }

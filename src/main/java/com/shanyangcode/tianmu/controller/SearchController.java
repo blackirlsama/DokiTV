@@ -14,7 +14,7 @@ import com.shanyangcode.tianmu.model.vo.user.SearchUserListResponse;
 import com.shanyangcode.tianmu.model.vo.video.SearchVideoListResponse;
 
 import jakarta.annotation.Resource;
-import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
@@ -51,8 +51,8 @@ public class SearchController {
 //    }
 
 
-    @GetMapping("/api/search/user")
-    public BaseResponse<List<SearchUserListResponse>> searchUser(@NotEmpty(message = "关键字不能为空") @RequestParam String keyword) {
+    @GetMapping("/search/user")
+    public BaseResponse<List<SearchUserListResponse>> searchUser(@NotNull(message = "关键字不能为空") @RequestParam String keyword) {
         // 1. 创建Criteria查询（最稳定的方式）
         Criteria criteria = new Criteria("nickname").matches(keyword);
         Query searchQuery = new CriteriaQuery(criteria);
@@ -86,8 +86,8 @@ public class SearchController {
     }
 
 
-    @GetMapping("/api/search/video")
-    public BaseResponse<List<SearchVideoListResponse>> searchVideo(@RequestParam String keyword) {
+    @GetMapping("/search/video")
+    public BaseResponse<List<SearchVideoListResponse>> searchVideo(@NotNull(message = "关键字不能为空")  @RequestParam String keyword) {
 
         // 1. 创建Criteria查询
         Criteria criteria = new Criteria("title").matches(keyword);
@@ -103,7 +103,7 @@ public class SearchController {
 
 
     }
-//
+
     private SearchVideoListResponse convertVideoToResponse(VideoEs videoEs) {
         SearchVideoListResponse response = new SearchVideoListResponse();
         response.setBulletCount(videoEs.getBulletCount());

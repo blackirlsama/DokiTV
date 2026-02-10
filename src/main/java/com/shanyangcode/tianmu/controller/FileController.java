@@ -1,24 +1,24 @@
 package com.shanyangcode.tianmu.controller;
 
+import java.util.List;
+import java.util.Set;
+
 import com.shanyangcode.tianmu.common.BaseResponse;
 import com.shanyangcode.tianmu.common.ErrorCode;
 import com.shanyangcode.tianmu.common.ResultUtils;
 import com.shanyangcode.tianmu.model.dto.file.InitUploadRequest;
 import com.shanyangcode.tianmu.model.dto.file.MergeChunkRequest;
 import com.shanyangcode.tianmu.service.FileService;
+
 import jakarta.annotation.Resource;
-import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.Set;
 
 /**
  * 视频上传
  */
 @RestController
-@RequestMapping("/api/file")
+@RequestMapping("/file")
 @Slf4j
 public class FileController {
 
@@ -35,17 +35,17 @@ public class FileController {
     }
 
     @PostMapping("/get/upload/urls")
-    public BaseResponse<List<String>> getUploadUrls(@Valid @RequestBody InitUploadRequest initUploadRequest) {
+    public BaseResponse<List<String>> getUploadUrls(@RequestBody InitUploadRequest initUploadRequest) {
         return ResultUtils.success(fileService.getUploadUrls(initUploadRequest));
     }
 
     @GetMapping("/get/upload/progress")
-    public BaseResponse<Set<Integer>> getUploadProgress(@Valid @RequestParam String fileHash) {
+    public BaseResponse<Set<Integer>> getUploadProgress(@RequestParam String fileHash) {
         return ResultUtils.success(fileService.getUploadProgress(fileHash));
     }
 
     @PostMapping("/merge/chunk")
-    public BaseResponse<String> mergeChunk(@Valid @RequestBody MergeChunkRequest mergeChunkRequest) {
+    public BaseResponse<String> mergeChunk(@RequestBody MergeChunkRequest mergeChunkRequest) {
         return ResultUtils.success(fileService.mergeChunk(mergeChunkRequest));
     }
 }

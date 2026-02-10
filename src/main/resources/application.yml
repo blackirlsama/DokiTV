@@ -3,12 +3,12 @@ spring:
     name: tianmu
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:3307/tianmu?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://120.53.45.251:13306/tianmu?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
     username: root
     password: gK3T9n%q2M@j7Z9
 
   elasticsearch:
-    uris: http://localhost:9200  # 你的ES地址
+    uris: http://120.53.45.251:9200  # 你的ES地址
     username: elastic      # 如果有认证
     password: tianmu
     connection-timeout: 5s
@@ -18,10 +18,10 @@ spring:
   data:
     redis:
       database: 15
-      host: 127.0.0.1
+      host: 120.53.45.251
       port: 6379
       timeout: 50000
-      password: ""
+      password: "e65K4t8w2"
       # Redis 服务器密码（当前未启用）
       # 配置 redis 连接池
       lettuce:
@@ -46,29 +46,31 @@ mybatis-plus:
       logic-not-delete-value: 0 # 逻辑未删除值（默认为 0）
 
 minio:
-  url: http://127.0.0.1:9000
+  url: http://120.53.45.251:9000
   access-key: minioadmin
   secret-key: minioadmin
   bucket-name: tianmu-upload
 
 
 netty:
-  port: 9100
+  port: 9101
 
 
 
 rocketmq:
-  name-server: localhost:9876
+  name-server: 120.53.45.251:9876
   producer:
     group: tianmuorange-producer-group
   consumer:
     group: tianmuorange-consumer-group
 server:
-  port: 8101
+  port: 8101                          # Spring Boot 服务监听端口
+  servlet:
+    context-path: /api
 
 canal:
   server:
-    host: 127.0.0.1
+    host: 120.53.45.251
     port: 11111
   destination: example
   username: canal

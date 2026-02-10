@@ -8,17 +8,19 @@ import com.shanyangcode.tianmu.constants.SMSConstant;
 import com.shanyangcode.tianmu.model.dto.user.LoginCodeRequest;
 import com.shanyangcode.tianmu.model.dto.user.LoginPasswordRequest;
 import com.shanyangcode.tianmu.model.dto.user.RegisterRequest;
+import com.shanyangcode.tianmu.model.dto.user.UserInfoRequest;
 import com.shanyangcode.tianmu.model.entity.User;
 import com.shanyangcode.tianmu.model.vo.user.LoginResponse;
+import com.shanyangcode.tianmu.model.vo.user.UserInfoResponse;
 import com.shanyangcode.tianmu.service.UserService;
 
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/user")
+@RequestMapping("/user")
 public class UserController {
 
     @Autowired
@@ -51,14 +53,25 @@ public class UserController {
 
     // login with passwords
     @PostMapping("/loginPassword")
-    public BaseResponse<LoginResponse> loginPassword(@Valid @RequestBody LoginPasswordRequest loginPasswordRequest, HttpServletRequest request) {
+    public BaseResponse<LoginResponse> loginPassword(@RequestBody LoginPasswordRequest loginPasswordRequest, HttpServletRequest request) {
         return ResultUtils.success(userService.loginPassword(loginPasswordRequest, request));
     }
 
     // login with verification code
     @PostMapping("/loginCode")
-    public BaseResponse<LoginResponse> loginCode(@Valid @RequestBody LoginCodeRequest loginCodeRequest, HttpServletRequest request) {
+    public BaseResponse<LoginResponse> loginCode(@RequestBody LoginCodeRequest loginCodeRequest, HttpServletRequest request) {
         return ResultUtils.success(userService.loginCode(loginCodeRequest, request));
+    }
+
+
+    @GetMapping("/logout")
+    public BaseResponse<Boolean> logout(@NotNull(message = "手用户id不能为空") @RequestParam Long userId, HttpServletRequest request) {
+        return ResultUtils.success(userService.userLogout(userId, request));
+    }
+
+    @PostMapping("/info")
+    public BaseResponse<UserInfoResponse> getUserInfo(@RequestBody UserInfoRequest userInfoRequest) {
+        return ResultUtils.success(userService.getUserInfo(userInfoRequest));
     }
 }
 

@@ -25,7 +25,7 @@ public class RedissonConfig {
     private Integer port = 6379;
     // Redis数据库编号，默认为0
     private Integer database = 0;
-    private String password = ""; // 空字符串，适配无密码Redis
+    private String password = "e65K4t8w2"; // 空字符串，适配无密码Redis
     private Integer timeout = 2000;
 
     @Bean
