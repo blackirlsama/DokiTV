@@ -52,30 +52,44 @@ public class FavoriteServiceImpl extends ServiceImpl<FavoriteMapper, Favorite> i
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long favoriteVideo(VideoActionRequest videoActionRequest) {
-        // 检测收藏频率是否过快
+        // 1. 提取核心参数，避免重复调用get方法，提升代码可读性
+        Long videoId = videoActionRequest.getVideoId();
+        Long userId = videoActionRequest.getUserId();
+
+        // 2. 检测收藏频率是否过快
         crawlerFavoriteDetect(videoActionRequest);
 
-        // 校验判断视频是否存在
-        ThrowUtils.throwIf(!videoService.lambdaQuery().eq(Video::getVideoId, videoActionRequest.getVideoId()).exists(), ErrorCode.VIDEO_NOT_FOUND_ERROR);
+        // 3. 校验视频是否存在
+        boolean videoExists = videoService.lambdaQuery().eq(Video::getVideoId, videoId).exists();
+        ThrowUtils.throwIf(!videoExists, ErrorCode.VIDEO_NOT_FOUND_ERROR, "视频不存在，无法收藏");
 
-        // 校验判断用户是否存在
-        ThrowUtils.throwIf(!userService.lambdaQuery().eq(User::getUserId, videoActionRequest.getUserId()).exists(), ErrorCode.USER_NOT_EXISTS);
+        // 4. 校验用户是否存在
+        boolean userExists = userService.lambdaQuery().eq(User::getUserId, userId).exists();
+        ThrowUtils.throwIf(!userExists, ErrorCode.USER_NOT_EXISTS, "用户不存在，无法收藏");
 
-        // 查询是否已经收藏
-        ThrowUtils.throwIf(!this.lambdaQuery().eq(Favorite::getVideoId, videoActionRequest.getVideoId()).eq(Favorite::getUserId, videoActionRequest.getUserId()).exists(), ErrorCode.VIDEO_FAVORITE_ERROR);
+        // 5. 核心修复：查询是否已经收藏（逻辑修正，去掉!取反）
+        boolean isFavorited = this.lambdaQuery()
+                .eq(Favorite::getVideoId, videoId)
+                .eq(Favorite::getUserId, userId)
+                .exists();
+        // 正确逻辑：如果已收藏（isFavorited=true），则抛出异常
+        ThrowUtils.throwIf(isFavorited, ErrorCode.VIDEO_FAVORITE_ERROR, "该视频已收藏，请勿重复收藏");
 
-        // 保存收藏记录
+        // 6. 保存收藏记录
         Favorite favoriteVideo = new Favorite();
-        favoriteVideo.setVideoId(videoActionRequest.getVideoId());
-        favoriteVideo.setUserId(videoActionRequest.getUserId());
+        favoriteVideo.setVideoId(videoId);
+        favoriteVideo.setUserId(userId);
         Snowflake snowflake = IdUtil.getSnowflake(SnowflakeConstant.WORKER_ID, SnowflakeConstant.DATA_CENTER_ID);
         favoriteVideo.setFavoriteId(snowflake.nextId());
         boolean save = this.save(favoriteVideo);
-        ThrowUtils.throwIf(!save, ErrorCode.SYSTEM_ERROR);
+        ThrowUtils.throwIf(!save, ErrorCode.SYSTEM_ERROR, "收藏记录保存失败");
 
-        // 视频点赞数+1
-        boolean updated = videoStatsService.lambdaUpdate().setSql("favorite_count = favorite_count + 1").eq(VideoStats::getVideoId, videoActionRequest.getVideoId()).update();
-        ThrowUtils.throwIf(!updated, ErrorCode.SYSTEM_ERROR, "更新视频统计失败");
+        // 7. 视频收藏数+1（修复注释错误：原注释写的是点赞数，实际是收藏数）
+        boolean updated = videoStatsService.lambdaUpdate()
+                .setSql("favorite_count = favorite_count + 1")
+                .eq(VideoStats::getVideoId, videoId)
+                .update();
+        ThrowUtils.throwIf(!updated, ErrorCode.SYSTEM_ERROR, "更新视频收藏数失败");
 
         return favoriteVideo.getFavoriteId();
     }
