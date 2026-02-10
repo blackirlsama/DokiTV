@@ -18,4 +18,6 @@ public interface BulletService extends IService<Bullet> {
     boolean deleteVideoBullet(DeleteBulletRequest deleteBulletRequest);
 
     List<OnlineBulletResponse> getBulletList(Long videoId);
+
+    boolean bulletExists(Long bulletId);
 }

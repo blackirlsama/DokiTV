@@ -38,27 +38,22 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow>
     implements FollowService {
 
     @Resource
-    private UserService userService; // 用户服务接口，用于处理用户相关操作
+    private UserService userService;
 
     @Resource
-    private UserStatsService userStatsService; // 用户统计服务接口，用于处理用户统计数据
+    private UserStatsService userStatsService;
 
 
 
-    /**
-     * 关注用户方法
-     * @param followRequest 关注请求对象，包含用户ID和创作者ID
-     * @return 返回操作是否成功
-     */
     @Override
-    @Transactional(rollbackFor = Exception.class) // 声明事务注解，指定发生Exception类异常时回滚
+    @Transactional(rollbackFor = Exception.class)
     public boolean follow(FollowRequest followRequest) {
 
-        // 查询用户是否存在，检查请求中的用户和创作者ID是否都存在于数据库中
+        // 查询用户是否存在
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
         queryWrapper.in("user_id", followRequest.getUserId(), followRequest.getCreatorId());
         List<User> users = userService.list(queryWrapper);
-        ThrowUtils.throwIf(users.size() != 2, ErrorCode.USER_NOT_EXISTS); // 如果查询结果不是2个用户，则抛出用户不存在异常
+        ThrowUtils.throwIf(users.size() != 2, ErrorCode.USER_NOT_EXISTS);
 
         // 关注
         Follow follow = new Follow();
@@ -84,56 +79,41 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow>
     /**
      * @MethodName chanelFollow
      * @Description 取消关注
-     * @param: followRequest 关注请求对象，包含用户ID和创作者ID
-     * @return: boolean 取消关注是否成功
+     * @param: followRequest
+     * @return: boolean
      * @Date 2025/4/10 14:41
      */
     @Override
-    @Transactional(rollbackFor = Exception.class) // 使用事务注解，确保方法内所有数据库操作要么全部成功，要么全部回滚
+    @Transactional(rollbackFor = Exception.class)
     public boolean chanelFollow(FollowRequest followRequest) {
 
         // 查询用户是否存在
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-    // 设置查询条件，同时查询用户ID和创作者ID
         queryWrapper.in("user_id", followRequest.getUserId(), followRequest.getCreatorId());
         List<User> users = userService.list(queryWrapper);
-    // 如果查询结果不为2个用户，则抛出用户不存在异常
         ThrowUtils.throwIf(users.size() != 2, ErrorCode.USER_NOT_EXISTS);
 
-    // 创建关注关系的查询条件
         QueryWrapper<Follow> queryFollowWrapper = new QueryWrapper<>();
-    // 设置查询条件，查询指定用户对指定创作者的关注记录
         queryFollowWrapper.eq("user_id", followRequest.getUserId()).eq("creator_id", followRequest.getCreatorId());
 
         // 更新粉丝统计
-    // 使用lambda更新表达式，将创作者的粉丝数减1
         boolean updatedFollowers = userStatsService.lambdaUpdate().setSql("followers = followers - 1").eq(UserStats::getUserId, followRequest.getCreatorId()).update();
-    // 如果更新失败，抛出系统错误异常
         ThrowUtils.throwIf(!updatedFollowers, ErrorCode.SYSTEM_ERROR, "更新博主粉丝统计失败");
 
         // 更新关注统计
-    // 使用lambda更新表达式，将用户的关注数减1
         boolean updatedFollowing = userStatsService.lambdaUpdate().setSql("following = following - 1").eq(UserStats::getUserId, followRequest.getUserId()).update();
-    // 如果更新失败，抛出系统错误异常
         ThrowUtils.throwIf(!updatedFollowing, ErrorCode.SYSTEM_ERROR, "更新用户关注统计失败");
 
 
-    // 删除关注关系记录并返回删除结果
         return this.remove(queryFollowWrapper);
     }
 
 
 
     @Override
-    /**
-     * 获取用户关注列表
-     * @param userId 用户ID
-     * @return 返回用户关注列表信息
-     */
     public List<UserListResponse> followList(Long userId) {
 
         // 查询用户是否存在关注
-        // 创建查询条件包装器，查询指定用户的关注记录
         QueryWrapper<Follow> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("user_id", userId);
         List<Follow> followList = this.list(queryWrapper);
@@ -185,26 +165,19 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow>
     }
 
 
-//    /**
-//     * @MethodName getFollowType
-//     * @Description 获取两人的关系 0 没有关注  1 已关注  2 相互关注
-//     * @param: userId
-//     * @param: creatorId
-//     * @return: java.lang.Integer
-//     * @Date 2025/4/10 14:54
-//     */
-//    @Override
-//    public Integer getFollowType(Long userId, Long creatorId) {
-//        Integer followType = 0;
-//        boolean existsFollowing = this.lambdaQuery().eq(Follow::getUserId, userId).eq(Follow::getCreatorId, creatorId).exists();
-//        boolean existsFollower = this.lambdaQuery().eq(Follow::getUserId, creatorId).eq(Follow::getCreatorId, userId).exists();
-//        if (existsFollowing && existsFollower) {
-//            followType = 2;
-//        } else if (existsFollowing && !existsFollower) {
-//            followType = 1;
-//        }
-//        return followType;
-//    }
+
+    @Override
+    public Integer getFollowType(Long userId, Long creatorId) {
+        Integer followType = 0;
+        boolean existsFollowing = this.lambdaQuery().eq(Follow::getUserId, userId).eq(Follow::getCreatorId, creatorId).exists();
+        boolean existsFollower = this.lambdaQuery().eq(Follow::getUserId, creatorId).eq(Follow::getCreatorId, userId).exists();
+        if (existsFollowing && existsFollower) {
+            followType = 2;
+        } else if (existsFollowing && !existsFollower) {
+            followType = 1;
+        }
+        return followType;
+    }
 }
 
 

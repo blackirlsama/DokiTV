@@ -1,13 +1,15 @@
 package com.shanyangcode.tianmu.service.impl;
 
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.shanyangcode.tianmu.common.ErrorCode;
 import com.shanyangcode.tianmu.constants.SnowflakeConstant;
+import com.shanyangcode.tianmu.constants.VideoConstant;
 import com.shanyangcode.tianmu.exception.BusinessException;
 import com.shanyangcode.tianmu.exception.ThrowUtils;
 import com.shanyangcode.tianmu.mapper.VideoMapper;
@@ -20,6 +22,7 @@ import com.shanyangcode.tianmu.model.vo.video.VideoDetailsResponse;
 import com.shanyangcode.tianmu.model.vo.video.VideoListResponse;
 import com.shanyangcode.tianmu.model.vo.video.VideoResponse;
 import com.shanyangcode.tianmu.service.*;
+import com.shanyangcode.tianmu.utils.BitMapBloomUtil;
 import com.shanyangcode.tianmu.utils.MinioUtil;
 
 import cn.hutool.core.lang.Snowflake;
@@ -27,6 +30,7 @@ import cn.hutool.core.util.IdUtil;
 import jakarta.annotation.Resource;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,6 +65,7 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video>
     private VideoMapper videoMapper;
 
     @Resource
+    @Lazy
     private BulletService bulletService;
 
 
@@ -76,6 +81,12 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video>
     @Lazy
     private CoinService coinService;
 
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+
+
+    @Resource
+    private FollowService followService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -143,7 +154,7 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video>
         ThrowUtils.throwIf(!updated, ErrorCode.SYSTEM_ERROR, "更新用户投稿统计失败");
 
         // 布隆过滤器添加视频 id
-        // BitMapBloomUtil.add(video.getVideoId().toString());
+        BitMapBloomUtil.add(video.getVideoId().toString());
         return true;
     }
 
@@ -170,12 +181,21 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video>
     }
 
 
+    public List<OnlineBulletResponse> getVideoBullets(Long videoId) {
+        return bulletService.getBulletList(videoId);
+    }
+
+    public List<VideoListResponse> getRecommendVideos(Integer categoryId, Long videoId) {
+        return videoMapper.recommendVideoList(categoryId, videoId);
+    }
+
 
     @Override
     public VideoResponse videoDetail(VideoActionRequest videoActionRequest) {
 
         // 校验视频是否存在 通过Bloom过滤器 防止缓存穿透
-        // ThrowUtils.throwIf(!BitMapBloomUtil.contains(videoActionRequest.getVideoId().toString()), ErrorCode.VIDEO_NOT_FOUND_ERROR);
+        ThrowUtils.throwIf(!BitMapBloomUtil.contains(videoActionRequest.getVideoId().toString()), ErrorCode.VIDEO_NOT_FOUND_ERROR);
+
         // 获取视频详情
         QueryWrapper<Video> videoQueryWrapper = new QueryWrapper<>();
         videoQueryWrapper.eq("video_id", videoActionRequest.getVideoId());
@@ -184,6 +204,12 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video>
         // 增加视频观看次数 使用原子操作更新 VideoStats
         boolean updated = videoStatsService.lambdaUpdate().setSql("view_count = view_count + 1").eq(VideoStats::getVideoId, videoActionRequest.getVideoId()).update();
         ThrowUtils.throwIf(!updated, ErrorCode.SYSTEM_ERROR, "更新视频统计失败");
+
+        if (stringRedisTemplate.hasKey("videoDetails:" + videoActionRequest.getVideoId().toString())) {
+            stringRedisTemplate.expire("videoDetails:" + videoActionRequest.getVideoId().toString(), VideoConstant.VIDEO_DETAIL_DAYS, TimeUnit.DAYS);
+            return hotVideoDetail(videoActionRequest, video);
+        }
+
         return publicVideoDetail(videoActionRequest, video);
     }
 
@@ -193,25 +219,109 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video>
         // 获取视频详情
         VideoDetailsResponse videoDetails = videoMapper.getVideoDetails(videoActionRequest.getVideoId());
 
-        // 获取弹幕列表
-        List<OnlineBulletResponse> onlineBulletResponses = bulletService.getBulletList(videoActionRequest.getVideoId());
-
-        // 获取推荐视频
-        List<VideoListResponse> recommendVideoList = videoMapper.recommendVideoList(video.getCategoryId(), video.getVideoId());
 
         // 封装响应对象
         VideoResponse videoResponse = new VideoResponse();
         videoResponse.setVideoDetailsResponse(videoDetails);
-        //videoResponse.setTripleActionResponse(getTripleActionResponse(videoActionRequest));
-        videoResponse.setOnlineBulletList(onlineBulletResponses);
-        videoResponse.setVideoRecommendListResponse(recommendVideoList);
-        //videoResponse.setFollow(followService.getFollowType(videoActionRequest.getUserId(), video.getUserId()));
+        videoResponse.setTripleActionResponse(getTripleActionResponse(videoActionRequest));
+        videoResponse.setOnlineBulletList(getVideoBullets(videoActionRequest.getVideoId()));
+        videoResponse.setVideoRecommendListResponse(getRecommendVideos(video.getCategoryId(), videoActionRequest.getVideoId()));
+        videoResponse.setFollow(followService.getFollowType(videoActionRequest.getUserId(), video.getUserId()));
 
 
+        //判断热点视频
+        QueryWrapper<VideoStats> videoStatsQueryWrapper = new QueryWrapper<>();
+        videoStatsQueryWrapper.eq("video_id", videoActionRequest.getVideoId());
+        VideoStats videoStats = videoStatsService.getOne(videoStatsQueryWrapper);
+        if (videoStats.getViewCount() >= VideoConstant.HOT_VIDEO_VIEW_COUNT) {
+            Map<String, String> redisVideoDetails = new HashMap<>();
+            redisVideoDetails.put("videoId", String.valueOf(videoDetails.getVideoId()));
+            redisVideoDetails.put("fileUrl", videoDetails.getFileUrl());
+            redisVideoDetails.put("userId", String.valueOf(videoDetails.getUserId()));
+            redisVideoDetails.put("title", videoDetails.getTitle());
+            redisVideoDetails.put("type", String.valueOf(videoDetails.getType()));
+            redisVideoDetails.put("duration", String.valueOf(videoDetails.getDuration()));
+            redisVideoDetails.put("tags", videoDetails.getTags());
+            redisVideoDetails.put("description", videoDetails.getDescription());
+            redisVideoDetails.put("createTime", String.valueOf(videoDetails.getCreateTime().getTime()));
+            redisVideoDetails.put("viewCount", String.valueOf(videoDetails.getViewCount()));
+            redisVideoDetails.put("bulletCount", String.valueOf(videoDetails.getBulletCount()));
+            redisVideoDetails.put("likeCount", String.valueOf(videoDetails.getLikeCount()));
+            redisVideoDetails.put("coinCount", String.valueOf(videoDetails.getCoinCount()));
+            redisVideoDetails.put("favoriteCount", String.valueOf(videoDetails.getFavoriteCount()));
+            redisVideoDetails.put("commentCount", String.valueOf(videoDetails.getCommentCount()));
+            redisVideoDetails.put("nickname", videoDetails.getNickname());
+            redisVideoDetails.put("avatar", videoDetails.getAvatar());
+            stringRedisTemplate.opsForHash().putAll("videoDetails:" + videoActionRequest.getVideoId().toString(), redisVideoDetails);
+            stringRedisTemplate.expire("videoDetails:" + videoActionRequest.getVideoId().toString(), VideoConstant.VIDEO_DETAIL_DAYS, TimeUnit.DAYS);
+
+        }
+        return videoResponse;
+    }
+
+
+    public VideoResponse hotVideoDetail(VideoActionRequest videoActionRequest, Video video) {
+
+        // 获取视频详情
+        Map<String, String> redisVideoDetails = stringRedisTemplate.opsForHash().entries("videoDetails:" + videoActionRequest.getVideoId()).entrySet().stream().collect(Collectors.toMap(e -> e.getKey().toString(), e -> e.getValue().toString(), (a, b) -> b, HashMap::new));
+
+        VideoDetailsResponse videoDetails = new VideoDetailsResponse();
+        // 基本视频信息
+        videoDetails.setVideoId(Long.parseLong(redisVideoDetails.get("videoId")));
+        videoDetails.setFileUrl(redisVideoDetails.get("fileUrl"));
+        videoDetails.setUserId(Long.parseLong(redisVideoDetails.get("userId")));
+        videoDetails.setTitle(redisVideoDetails.get("title"));
+        videoDetails.setType(Integer.parseInt(redisVideoDetails.get("type")));
+        videoDetails.setDuration(Double.parseDouble(redisVideoDetails.get("duration")));
+        videoDetails.setTags(redisVideoDetails.get("tags"));
+        videoDetails.setDescription(redisVideoDetails.get("description"));
+        long timestamp = Long.parseLong(redisVideoDetails.get("createTime"));
+        videoDetails.setCreateTime(new Date(timestamp));
+        videoDetails.setViewCount(Integer.parseInt(redisVideoDetails.get("viewCount")));
+        videoDetails.setBulletCount(Integer.parseInt(redisVideoDetails.get("bulletCount")));
+        videoDetails.setLikeCount(Integer.parseInt(redisVideoDetails.get("likeCount")));
+        videoDetails.setCoinCount(Integer.parseInt(redisVideoDetails.get("coinCount")));
+        videoDetails.setFavoriteCount(Integer.parseInt(redisVideoDetails.get("favoriteCount")));
+        videoDetails.setCommentCount(Integer.parseInt(redisVideoDetails.get("commentCount")));
+        videoDetails.setNickname(redisVideoDetails.get("nickname"));
+        videoDetails.setAvatar(redisVideoDetails.get("avatar"));
+
+
+        // 封装响应对象
+        VideoResponse videoResponse = new VideoResponse();
+        videoResponse.setVideoDetailsResponse(videoDetails);
+        videoResponse.setTripleActionResponse(getTripleActionResponse(videoActionRequest));
+        videoResponse.setOnlineBulletList(getVideoBullets(videoActionRequest.getVideoId()));
+        videoResponse.setVideoRecommendListResponse(getRecommendVideos(video.getCategoryId(), video.getVideoId()));
+        videoResponse.setFollow(followService.getFollowType(videoActionRequest.getUserId(), video.getUserId()));
 
         return videoResponse;
     }
 
+    public TripleActionResponse getTripleActionResponse(VideoActionRequest videoActionRequest) {
+        TripleActionResponse tripleActionResponse = new TripleActionResponse();
+        // 是否点赞
+        if (videoActionRequest.getUserId() != null) {
+            // 判断是否点赞
+            Like likeVideo = likeService.lambdaQuery().eq(Like::getVideoId, videoActionRequest.getVideoId()).eq(Like::getUserId, videoActionRequest.getUserId()).one();
+            if (likeVideo != null) {
+                tripleActionResponse.setLikeId(likeVideo.getLikeId());
+            }
+
+            // 是否收藏
+            Favorite favoriteVideo = favoriteService.lambdaQuery().eq(Favorite::getVideoId, videoActionRequest.getVideoId()).eq(Favorite::getUserId, videoActionRequest.getUserId()).one();
+            if (favoriteVideo != null) {
+                tripleActionResponse.setFavoriteId(favoriteVideo.getFavoriteId());
+            }
+
+            // 是否投币
+            Coin coinVideo = coinService.lambdaQuery().eq(Coin::getVideoId, videoActionRequest.getVideoId()).eq(Coin::getUserId, videoActionRequest.getUserId()).one();
+            if (coinVideo != null) {
+                tripleActionResponse.setCoin(true);
+            }
+        }
+        return tripleActionResponse;
+    }
 
     @Override
     public List<VideoListResponse> getSubmitVideoList(Long uid) {
@@ -225,73 +335,53 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video>
 
 
 
-/**
- * 执行视频三连操作（点赞、收藏、投币）
- * @param videoActionRequest 包含用户ID和视频ID的请求对象
- * @return TripleActionResponse 包含操作结果的响应对象
- * @throws BusinessException 当操作失败或不符合条件时抛出
- */
     @Override
-    @Transactional(rollbackFor = Exception.class) // 声明事务，确保所有操作要么全部成功，要么全部回滚
+    @Transactional(rollbackFor = Exception.class)
     public TripleActionResponse tripleAction(VideoActionRequest videoActionRequest) {
         // 1. 校验用户和视频
-        Long vid = videoActionRequest.getVideoId(); // 获取视频ID
-        Long uid = videoActionRequest.getUserId(); // 获取用户ID
+        Long vid = videoActionRequest.getVideoId();
+        Long uid = videoActionRequest.getUserId();
 
-    // 检查视频是否存在
         boolean videoExists = this.lambdaQuery().eq(Video::getVideoId, vid).exists();
         ThrowUtils.throwIf(!videoExists, ErrorCode.VIDEO_NOT_FOUND_ERROR);
 
-    // 查询用户信息
         User user = userService.lambdaQuery().eq(User::getUserId, uid).one();
 
-    // 查询用户统计信息（主要是硬币数量）
         UserStats userStats = userStatsService.lambdaQuery().eq(UserStats::getUserId, uid).one();
 
-    // 校验用户是否存在
         ThrowUtils.throwIf(user == null, ErrorCode.USER_NOT_EXISTS);
 
-    // 校验用户是否有足够的硬币进行投币
         ThrowUtils.throwIf(userStats.getCoinCount() < 1, ErrorCode.USER_COIN_ERROR);
 
         // 2. 查询是否已三连（1次查询优化）
-    // 检查用户是否已点赞
         boolean hasLiked = likeService.lambdaQuery().eq(Like::getVideoId, videoActionRequest.getVideoId()).eq(Like::getUserId, videoActionRequest.getUserId()).exists();
-    // 检查用户是否已收藏
         boolean hasFavorite = favoriteService.lambdaQuery().eq(Favorite::getVideoId, videoActionRequest.getVideoId()).eq(Favorite::getUserId, videoActionRequest.getUserId()).exists();
-    // 检查用户是否已投币
         boolean hasCoined = coinService.lambdaQuery().eq(Coin::getVideoId, videoActionRequest.getVideoId()).eq(Coin::getUserId, videoActionRequest.getUserId()).exists();
 
         // 3. 执行三连操作
-        TripleActionResponse response = new TripleActionResponse(); // 创建响应对象
-    // 雪花ID生成器，用于生成唯一ID
+        TripleActionResponse response = new TripleActionResponse();
         Snowflake snowflake = IdUtil.getSnowflake(SnowflakeConstant.WORKER_ID, SnowflakeConstant.DATA_CENTER_ID);
-    // 创建视频统计更新的条件构造器
         LambdaUpdateWrapper<VideoStats> statsUpdate = new LambdaUpdateWrapper<VideoStats>().eq(VideoStats::getVideoId, vid);
 
-        // 点赞操作
+        // 点赞
         if (!hasLiked) {
-            Like like = new Like(); // 创建点赞记录
-            like.setVideoId(vid); // 设置视频ID
-            like.setUserId(uid); // 设置用户ID
-            like.setLikeId(snowflake.nextId()); // 生成点赞ID
-        // 保存点赞记录，失败则抛出异常
+            Like like = new Like();
+            like.setVideoId(vid);
+            like.setUserId(uid);
+            like.setLikeId(snowflake.nextId());
             ThrowUtils.throwIf(!likeService.save(like), ErrorCode.SYSTEM_ERROR);
-            response.setLikeId(like.getLikeId()); // 在响应中设置点赞ID
-        // 更新视频点赞数统计
+            response.setLikeId(like.getLikeId());
             statsUpdate.setSql("like_count = like_count + 1");
         }
 
-        // 收藏操作
+        // 收藏
         if (!hasFavorite) {
-            Favorite favorite = new Favorite(); // 创建收藏记录
-            favorite.setVideoId(vid); // 设置视频ID
-            favorite.setUserId(uid); // 设置用户ID
-            favorite.setFavoriteId(snowflake.nextId()); // 生成收藏ID
-        // 保存收藏记录，失败则抛出异常
+            Favorite favorite = new Favorite();
+            favorite.setVideoId(vid);
+            favorite.setUserId(uid);
+            favorite.setFavoriteId(snowflake.nextId());
             ThrowUtils.throwIf(!favoriteService.save(favorite), ErrorCode.SYSTEM_ERROR);
-            response.setFavoriteId(favorite.getFavoriteId()); // 在响应中设置收藏ID
-        // 更新视频收藏数统计
+            response.setFavoriteId(favorite.getFavoriteId());
             statsUpdate.setSql("favorite_count = favorite_count + 1");
         }
 
