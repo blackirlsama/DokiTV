@@ -2,10 +2,14 @@ package com.shanyangcode.tianmu.client;
 
 
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import com.alibaba.otter.canal.client.CanalConnector;
 import com.alibaba.otter.canal.protocol.CanalEntry;
 import com.alibaba.otter.canal.protocol.Message;
+import com.shanyangcode.tianmu.constants.VideoConstant;
 import com.shanyangcode.tianmu.esdao.UserEsDao;
 import com.shanyangcode.tianmu.esdao.VideoEsDao;
 import com.shanyangcode.tianmu.model.es.UserEs;
@@ -16,6 +20,7 @@ import jakarta.annotation.Resource;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -32,6 +37,9 @@ public class CanalClient implements CommandLineRunner {
     @Resource
     private VideoEsDao videoEsDao;
 
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+
 
     private static final int MAX_RETRY_TIMES = 5; // 发生错误后最大重试次数
 
@@ -43,7 +51,7 @@ public class CanalClient implements CommandLineRunner {
 
     private static final long IDLE_CHECK_INTERVAL = 5000; // 5秒检查一次空闲状态
     // 需要监听的表名集合
-    private static final Set<String> MONITOR_TABLES = Set.of("user", "video", "video_stats", "user_stats");
+    private static final Set<String> MONITOR_TABLES = Set.of("user", "video", "video_stats", "user_stats", "bullet");
 
     @Override
     public void run(String... args) {
@@ -218,10 +226,10 @@ public class CanalClient implements CommandLineRunner {
             map.put(column.getName(), column.getValue());
         }
         log.info("表名：{}，数据：{}", tableName, map);
-        if (tableName.equals("user")) {
-            insertUserToEs(map);
-        } else if (tableName.equals("video")) {
-            insertVideoToEs(map);
+        switch (tableName) {
+            case "user" -> insertUserToEs(map);
+            case "video" -> insertVideoToEs(map);
+            case "bullet" -> insertBulletToRedis(map);
         }
     }
 
@@ -255,7 +263,22 @@ public class CanalClient implements CommandLineRunner {
         }
     }
 
-
+    private void insertBulletToRedis(Map<String, String> map) {
+        String cacheKey = "video:" + map.get("video_id") + ":bullet";
+        String uid = map.get("user_id");
+        String id = map.get("bullet_id");
+        String content = map.get("content");
+        Double timePoint = Double.valueOf(map.get("playback_time"));
+        String value = uid + ":" + id + ":" + content;
+        try {
+            // 预防缓存雪崩
+            stringRedisTemplate.opsForZSet().add(cacheKey, value, timePoint);
+            stringRedisTemplate.expire(cacheKey, 72 * 3600 + ThreadLocalRandom.current().nextInt(3600), TimeUnit.SECONDS);
+            log.info("Redis 插入弹幕成功: {}", value);
+        } catch (Exception e) {
+            log.error("Redis 插入失败: ", e);
+        }
+    }
 
     private void handleUpdate(List<CanalEntry.Column> columns, String tableName) {
         Map<String, String> map = new HashMap<>();
@@ -319,6 +342,39 @@ public class CanalClient implements CommandLineRunner {
 
 
     private void updateVideoStats(Map<String, String> map) {
+        updateVideoToEs(map);
+        updateVideoToRedis(map);
+    }
+
+
+    private void updateVideoToRedis(Map<String, String> map) {
+        try {
+            String cacheKey = "videoDetails:" + map.get("video_id");
+            if (stringRedisTemplate.hasKey(cacheKey)) {
+                Map<String, String> videoDetails = stringRedisTemplate.opsForHash().entries(cacheKey).entrySet().stream().collect(Collectors.toMap(e -> e.getKey().toString(), e -> e.getValue().toString(), (a, b) -> b, HashMap::new));
+                String viewCount = map.get("view_count");
+                String bulletCount = map.get("bullet_count");
+                String likeCount = map.get("like_count");
+                String coinCount = map.get("coin_count");
+                String favoriteCount = map.get("favorite_count");
+                String commentCount = map.get("comment_count");
+                videoDetails.put("viewCount", viewCount);
+                videoDetails.put("bulletCount", bulletCount);
+                videoDetails.put("likeCount", likeCount);
+                videoDetails.put("coinCount", coinCount);
+                videoDetails.put("favoriteCount", favoriteCount);
+                videoDetails.put("commentCount", commentCount);
+                stringRedisTemplate.opsForHash().putAll(cacheKey, videoDetails);
+                stringRedisTemplate.expire(cacheKey, VideoConstant.VIDEO_DETAIL_DAYS, TimeUnit.DAYS);
+            }
+
+            log.info("Redis 更新视频详情成功");
+        } catch (Exception e) {
+            log.error("Redis 更新视频详情失败", e);
+        }
+    }
+
+    private void updateVideoToEs(Map<String, String> map) {
         try {
             Long videoId = Long.valueOf(map.get("video_id"));
             Integer viewCount = Integer.valueOf(map.get("view_count"));
@@ -343,6 +399,8 @@ public class CanalClient implements CommandLineRunner {
             log.error("ES 更新视频统计失败", e);
         }
     }
+
+
 
     private void updateUserStats(Map<String, String> map) {
         try {
@@ -373,10 +431,10 @@ public class CanalClient implements CommandLineRunner {
         for (CanalEntry.Column column : columns) {
             map.put(column.getName(), column.getValue());
         }
-        if (tableName.equals("user")) {
-            deleteUserToEs(map);
-        } else if (tableName.equals("video")) {
-            deleteVideoToEs(map);
+        switch (tableName) {
+            case "bullet" -> deleteBulletToRedis(map);
+            case "user" -> deleteUserToEs(map);
+            case "video" -> deleteVideoToEs(map);
         }
     }
 
@@ -399,5 +457,20 @@ public class CanalClient implements CommandLineRunner {
         }
     }
 
+
+    private void deleteBulletToRedis(Map<String, String> map) {
+        try {
+            String vid = map.get("video_id");
+            String uid = map.get("user_id");
+            String id = map.get("bullet_id");
+            String content = map.get("content");
+            String cacheKey = "video:" + vid + ":bullet";
+            String value = uid + ":" + id + ":" + content;
+            stringRedisTemplate.opsForZSet().remove(cacheKey, value);
+            log.info("Redis 删除弹幕成功: {}", map.get("bullet_id"));
+        } catch (Exception e) {
+            log.error("Redis 删除弹幕失败: ", e);
+        }
+    }
 
 }

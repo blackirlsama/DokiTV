@@ -22,7 +22,7 @@ spring:
       port: 6379
       timeout: 50000
       password: ""
-      #    password: e65K4t8w2 # Redis 服务器密码（当前未启用）
+      # Redis 服务器密码（当前未启用）
       # 配置 redis 连接池
       lettuce:
         pool:
@@ -58,11 +58,11 @@ netty:
 
 
 rocketmq:
-  name-server: 127.0.0.1:9876
+  name-server: localhost:9876
   producer:
-    group: zzz-producer-group
+    group: tianmuorange-producer-group
   consumer:
-    group: zzz-consumer-group
+    group: tianmuorange-consumer-group
 server:
   port: 8101
 
