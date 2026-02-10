@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Slf4j
-@RocketMQMessageListener(topic = "tianmu-topic", consumerGroup = "tianmuorange-consumer-group")
+@RocketMQMessageListener(topic = "zzz-topic", consumerGroup = "zzz-consumer-group")
 public class RocketMQConsumer implements RocketMQListener<String> {
 
     @Resource
@@ -25,6 +25,10 @@ public class RocketMQConsumer implements RocketMQListener<String> {
     public void onMessage(String message) {
         SendBulletRequest sendBulletRequest = JSON.parseObject(message, SendBulletRequest.class);
         System.out.println("收到消息: " + message);
+
+        if (bulletService.bulletExists(sendBulletRequest.getBulletId())) {
+            return;
+        }
 
         try {
             bulletService.saveBulletToMySQL(sendBulletRequest);
