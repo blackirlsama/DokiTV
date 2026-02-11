@@ -41,6 +41,8 @@ public class SendBulletRequest implements Serializable {
      */
     private Double playbackTime;
 
+    private String color; // 核心新增：接收前端传的弹幕颜色
+
 
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;

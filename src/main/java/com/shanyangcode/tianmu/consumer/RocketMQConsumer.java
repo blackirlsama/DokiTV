@@ -28,6 +28,13 @@ public class RocketMQConsumer implements RocketMQListener<String> {
         Long bulletId = sendBulletRequest.getBulletId();
         Long videoId = sendBulletRequest.getVideoId();
 
+        System.out.println("解析后的参数：");
+        System.out.println("videoId: " + sendBulletRequest.getVideoId());
+        System.out.println("userId: " + sendBulletRequest.getUserId());
+        System.out.println("content: " + sendBulletRequest.getContent());
+        System.out.println("playbackTime: " + sendBulletRequest.getPlaybackTime());
+        System.out.println("color: " + sendBulletRequest.getColor()); // 重点看颜色字段！
+
         // 1. 校验弹幕是否已存在（逻辑保留）
         if (bulletService.bulletExists(bulletId)) {
             log.info("弹幕已存在，跳过保存，bulletId: {}", bulletId); // 补充日志
