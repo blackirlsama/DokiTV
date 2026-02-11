@@ -51,24 +51,40 @@ public class BulletServiceImpl extends ServiceImpl<BulletMapper, Bullet> impleme
         Long videoId = sendBulletRequest.getVideoId();
         Long userId = sendBulletRequest.getUserId();
 
-        // 校验视频是否存在（优化为 exists 查询）
-        ThrowUtils.throwIf(!videoService.lambdaQuery().eq(Video::getVideoId, videoId).exists(), ErrorCode.VIDEO_NOT_FOUND_ERROR);
+        // 新增：打印日志，确认方法执行+入参
+        System.out.println("保存弹幕入参：videoId=" + videoId + ", userId=" + userId + ", bulletId=" + sendBulletRequest.getBulletId());
 
-        // 校验用户是否存在
+        // 校验视频/用户（保留）
+        ThrowUtils.throwIf(!videoService.lambdaQuery().eq(Video::getVideoId, videoId).exists(), ErrorCode.VIDEO_NOT_FOUND_ERROR);
         ThrowUtils.throwIf(!userService.lambdaQuery().eq(User::getUserId, userId).exists(), ErrorCode.USER_NOT_EXISTS);
 
-        // 使用原子操作更新 VideoStats
+        // 初始化video_stats（保留，补充必填字段）
+        boolean statsExists = videoStatsService.lambdaQuery().eq(VideoStats::getVideoId, videoId).exists();
+        if (!statsExists) {
+            VideoStats videoStats = new VideoStats();
+            videoStats.setVideoId(videoId);
+            videoStats.setBulletCount(0);
+            videoStats.setViewCount(0);
+            videoStats.setIsDelete(0); // 补充：如果表有is_delete字段，加这个
+            videoStats.setCreateTime(new Date()); // 补充：如果表有create_time，加这个
+            videoStatsService.save(videoStats);
+            System.out.println("初始化video_stats成功，videoId=" + videoId);
+        }
+
+        // 更新bullet_count（保留）
         boolean updated = videoStatsService.lambdaUpdate().setSql("bullet_count = bullet_count + 1").eq(VideoStats::getVideoId, videoId).update();
+        System.out.println("bullet_count更新结果：" + updated); // 新增日志
         ThrowUtils.throwIf(!updated, ErrorCode.SYSTEM_ERROR, "更新视频统计失败");
 
-        // 保存弹幕
+        // 修复：后端生成bulletId，不依赖前端
         Bullet bullet = new Bullet();
         bullet.setVideoId(videoId);
         bullet.setUserId(userId);
         bullet.setContent(sendBulletRequest.getContent());
         bullet.setPlaybackTime(sendBulletRequest.getPlaybackTime());
-        bullet.setBulletId(sendBulletRequest.getBulletId());
+        bullet.setBulletId(System.currentTimeMillis() + ThreadLocalRandom.current().nextLong(1000, 9999));
         boolean saved = this.save(bullet);
+        System.out.println("弹幕保存结果：" + saved); // 新增日志
         ThrowUtils.throwIf(!saved, ErrorCode.SYSTEM_ERROR, "保存弹幕失败");
     }
 

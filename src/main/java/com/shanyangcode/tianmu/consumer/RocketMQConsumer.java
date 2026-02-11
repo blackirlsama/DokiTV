@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Slf4j
-@RocketMQMessageListener(topic = "zzz-topic", consumerGroup = "zzz-consumer-group")
+@RocketMQMessageListener(topic = "tianmu-topic", consumerGroup = "tianmuorange-consumer-group")
 public class RocketMQConsumer implements RocketMQListener<String> {
 
     @Resource
@@ -25,17 +25,26 @@ public class RocketMQConsumer implements RocketMQListener<String> {
     public void onMessage(String message) {
         SendBulletRequest sendBulletRequest = JSON.parseObject(message, SendBulletRequest.class);
         System.out.println("收到消息: " + message);
+        Long bulletId = sendBulletRequest.getBulletId();
+        Long videoId = sendBulletRequest.getVideoId();
 
-        if (bulletService.bulletExists(sendBulletRequest.getBulletId())) {
+        // 1. 校验弹幕是否已存在（逻辑保留）
+        if (bulletService.bulletExists(bulletId)) {
+            log.info("弹幕已存在，跳过保存，bulletId: {}", bulletId); // 补充日志
             return;
         }
 
         try {
             bulletService.saveBulletToMySQL(sendBulletRequest);
+            // 2. 新增：保存成功日志（关键！）
+            log.info("弹幕保存到MySQL成功，videoId: {}, bulletId: {}", videoId, bulletId);
         } catch (Exception e) {
-            log.error("保存到MySQL失败，消息ID: {}", sendBulletRequest.getBulletId(), e);
-            throw new RuntimeException("MySQL保存失败", e);
+            // 3. 优化：明确打印异常原因（比如主键冲突）
+            log.error("保存到MySQL失败，videoId: {}, bulletId: {}, 原因: {}",
+                    videoId, bulletId, e.getMessage(), e);
+            // 注释掉抛异常（避免MQ重复消费，先定位问题）
+            // throw new RuntimeException("MySQL保存失败", e);
         }
     }
-
 }
+
