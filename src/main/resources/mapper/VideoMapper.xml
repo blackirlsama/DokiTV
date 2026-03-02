@@ -2,9 +2,9 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.shanyangcode.tianmu.mapper.VideoMapper">
+<mapper namespace="com.orangecode.tianmu.mapper.VideoMapper">
 
-    <resultMap id="BaseResultMap" type="com.shanyangcode.tianmu.model.entity.Video">
+    <resultMap id="BaseResultMap" type="com.orangecode.tianmu.model.entity.Video">
             <id property="videoId" column="video_id" jdbcType="BIGINT"/>
             <result property="fileUrl" column="file_url" jdbcType="VARCHAR"/>
             <result property="coverUrl" column="cover_url" jdbcType="VARCHAR"/>
@@ -30,7 +30,7 @@
     </sql>
 
 
-    <select id="selectVideoWithStats" resultType="com.shanyangcode.tianmu.model.vo.video.VideoListResponse">
+    <select id="selectVideoWithStats" resultType="com.orangecode.tianmu.model.vo.video.VideoListResponse">
         SELECT v.video_id, vs.view_count, vs.bullet_count, v.user_id,
         v.file_url, v.cover_url, v.duration,
         v.title, v.create_time, u.nickname
@@ -42,7 +42,7 @@
         LIMIT #{current}, #{pageSize}
     </select>
 
-    <select id="recommendVideoList" resultType="com.shanyangcode.tianmu.model.vo.video.VideoListResponse">
+    <select id="recommendVideoList" resultType="com.orangecode.tianmu.model.vo.video.VideoListResponse">
         SELECT v.video_id, vs.view_count, vs.bullet_count, v.user_id,
                v.file_url, v.cover_url, v.duration,
                v.title, v.create_time, u.nickname
@@ -53,7 +53,7 @@
     </select>
 
 
-    <select id="getVideoDetails" resultType="com.shanyangcode.tianmu.model.vo.video.VideoDetailsResponse">
+    <select id="getVideoDetails" resultType="com.orangecode.tianmu.model.vo.video.VideoDetailsResponse">
         SELECT
             v.video_id,
             v.file_url,
@@ -81,7 +81,7 @@
           AND v.status = 2;
     </select>
 
-    <select id="getSubmitVideoList" resultType="com.shanyangcode.tianmu.model.vo.video.VideoListResponse">
+    <select id="getSubmitVideoList" resultType="com.orangecode.tianmu.model.vo.video.VideoListResponse">
         SELECT v.video_id, vs.view_count, vs.bullet_count, v.user_id,
                v.file_url, v.cover_url, v.duration,
                v.title, v.create_time, u.nickname
@@ -91,7 +91,7 @@
         WHERE v.is_delete = 0 and v.user_id = #{userId}
     </select>
 
-    <select id="getCategoryVideoList" resultType="com.shanyangcode.tianmu.model.vo.video.VideoListResponse">
+    <select id="getCategoryVideoList" resultType="com.orangecode.tianmu.model.vo.video.VideoListResponse">
         SELECT v.video_id, vs.view_count, vs.bullet_count, v.user_id,
                v.file_url, v.cover_url, v.duration,
                v.title, v.create_time, u.nickname
@@ -103,7 +103,7 @@
 
 
 
-    <select id="getLikeVideoList" resultType="com.shanyangcode.tianmu.model.vo.video.VideoListResponse">
+    <select id="getLikeVideoList" resultType="com.orangecode.tianmu.model.vo.video.VideoListResponse">
         SELECT v.video_id, vs.view_count, vs.bullet_count, v.user_id,
                v.file_url, v.cover_url, v.duration,
                v.title, v.create_time, u.nickname
@@ -116,7 +116,7 @@
 
 
 
-    <select id="getCoinVideoList" resultType="com.shanyangcode.tianmu.model.vo.video.VideoListResponse">
+    <select id="getCoinVideoList" resultType="com.orangecode.tianmu.model.vo.video.VideoListResponse">
         SELECT v.video_id, vs.view_count, vs.bullet_count, v.user_id,
                v.file_url, v.cover_url, v.duration,
                v.title, v.create_time, u.nickname
@@ -129,7 +129,7 @@
 
 
 
-    <select id="getFavoriteVideoList" resultType="com.shanyangcode.tianmu.model.vo.video.FavoriteVideoResponse">
+    <select id="getFavoriteVideoList" resultType="com.orangecode.tianmu.model.vo.video.FavoriteVideoResponse">
         SELECT
             v.video_id, vs.view_count, vs.bullet_count, v.user_id,
             v.file_url, v.cover_url, v.duration,

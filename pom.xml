@@ -8,7 +8,7 @@
         <version>3.5.3</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
-    <groupId>com.shanyangcode</groupId>
+    <groupId>com.orangecode</groupId>
     <artifactId>tianmu</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>tianmu</name>

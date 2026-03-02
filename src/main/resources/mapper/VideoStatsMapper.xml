@@ -2,9 +2,9 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.shanyangcode.tianmu.mapper.VideoStatsMapper">
+<mapper namespace="com.orangecode.tianmu.mapper.VideoStatsMapper">
 
-    <resultMap id="BaseResultMap" type="com.shanyangcode.tianmu.model.entity.VideoStats">
+    <resultMap id="BaseResultMap" type="com.orangecode.tianmu.model.entity.VideoStats">
             <id property="videoId" column="video_id" jdbcType="BIGINT"/>
             <result property="viewCount" column="view_count" jdbcType="INTEGER"/>
             <result property="bulletCount" column="bullet_count" jdbcType="INTEGER"/>

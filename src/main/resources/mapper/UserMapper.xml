@@ -2,8 +2,8 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.shanyangcode.tianmu.mapper.UserMapper">
-    <select id="getUserInfo" resultType="com.shanyangcode.tianmu.model.vo.user.LoginResponse">
+<mapper namespace="com.orangecode.tianmu.mapper.UserMapper">
+    <select id="getUserInfo" resultType="com.orangecode.tianmu.model.vo.user.LoginResponse">
         SELECT u.user_id,
                u.phone,
                u.nickname,

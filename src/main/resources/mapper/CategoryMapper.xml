@@ -2,9 +2,9 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.shanyangcode.tianmu.mapper.CategoryMapper">
+<mapper namespace="com.orangecode.tianmu.mapper.CategoryMapper">
 
-    <resultMap id="BaseResultMap" type="com.shanyangcode.tianmu.model.entity.Category">
+    <resultMap id="BaseResultMap" type="com.orangecode.tianmu.model.entity.Category">
             <id property="categoryId" column="category_id" jdbcType="INTEGER"/>
             <result property="categoryName" column="category_name" jdbcType="VARCHAR"/>
             <result property="createTime" column="create_time" jdbcType="TIMESTAMP"/>
