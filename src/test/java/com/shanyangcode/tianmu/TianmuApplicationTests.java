@@ -1,4 +1,4 @@
-package com.shanyangcode.tianmu;
+package com.orangecode.tianmu;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

@@ -2,9 +2,9 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.shanyangcode.tianmu.mapper.FollowMapper">
+<mapper namespace="com.orangecode.tianmu.mapper.FollowMapper">
 
-    <resultMap id="BaseResultMap" type="com.shanyangcode.tianmu.model.entity.Follow">
+    <resultMap id="BaseResultMap" type="com.orangecode.tianmu.model.entity.Follow">
             <id property="followId" column="follow_id" jdbcType="BIGINT"/>
             <result property="userId" column="user_id" jdbcType="BIGINT"/>
             <result property="creatorId" column="creator_id" jdbcType="BIGINT"/>

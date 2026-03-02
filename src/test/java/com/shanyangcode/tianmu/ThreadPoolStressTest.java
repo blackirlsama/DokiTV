@@ -1,8 +1,8 @@
-package com.shanyangcode.tianmu;
+package com.orangecode.tianmu;
 
-import com.shanyangcode.tianmu.common.ThreadPoolMonitor;
-import com.shanyangcode.tianmu.model.dto.file.InitUploadRequest;
-import com.shanyangcode.tianmu.service.FileService;
+import com.orangecode.tianmu.common.ThreadPoolMonitor;
+import com.orangecode.tianmu.model.dto.file.InitUploadRequest;
+import com.orangecode.tianmu.service.FileService;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
