@@ -1,0 +1,6 @@
+{
+  "name": "video-metrics",
+  "version": "1.0.0",
+  "description": "按视频和业务日期查询弹幕数量",
+  "tools": ["query_video_metrics"]
+}

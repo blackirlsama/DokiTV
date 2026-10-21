@@ -11,9 +11,16 @@ spring:
       request-timeout: 60000
   jackson:
     time-zone: Asia/Shanghai
+agent:
+  preparation:
+    faq-timeout: 300ms
+    parallel-timeout: 2s
+    rewrite-timeout: 1500ms
+    emotion-timeout: 300ms
 harness:
   loop:
     max-turns: 6
+    max-model-calls: 16
     request-timeout: 30s
     model-timeout: 5s
     tool-timeout: 5s

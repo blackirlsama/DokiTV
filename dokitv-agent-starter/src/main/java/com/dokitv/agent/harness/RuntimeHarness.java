@@ -19,6 +19,7 @@ public class RuntimeHarness implements AutoCloseable {
     private final TransformDispatcher transforms;
     private final LoopControl loopControl;
     private final boolean ownsLoopControl;
+    private final Map<UUID, HarnessSession> sessions = new java.util.concurrent.ConcurrentHashMap<>();
     @org.springframework.beans.factory.annotation.Autowired
     public RuntimeHarness(Tracer tracer, HookDispatcher hooks, TransformDispatcher transforms, LoopControl control) {
         this(tracer, hooks, transforms, control, false);
@@ -40,7 +41,8 @@ public class RuntimeHarness implements AutoCloseable {
                 run.snapshot().steps()), run::checkpoint);
     }
     public HarnessSession start(RunState run) {
-        HarnessSession session = run.harnessSession(() -> new HarnessSession(run, tracer, hooks));
+        HarnessSession session = sessions.computeIfAbsent(run.id, id -> new HarnessSession(run, tracer, hooks));
+        run.traceId(session.traceId());
         loopControl.arm(run);
         session.begin();
         return session;
@@ -55,7 +57,8 @@ public class RuntimeHarness implements AutoCloseable {
     public <T> T toolCall(RunState run, Function<CallControl, T> operation) {
         return loopControl.call(run, policy().toolTimeout(), "TOOL_CALL_TIMEOUT", "TOOL_ERROR", this::contextual, operation);
     }
-    @Override public void close() { if (ownsLoopControl) loopControl.close(); }
+    public void forget(UUID id) { sessions.remove(id); }
+    @Override public void close() { if (ownsLoopControl) loopControl.close(); sessions.clear(); }
     public <T> T stage(RunState run, String name, HookPoint before, HookPoint after,
                        Map<String, Object> attributes, Supplier<T> operation) {
         HarnessSession session = start(run);

@@ -29,12 +29,43 @@ class AgentRuntimeTest {
     private RunState run(String message) { return new RunState(alice(), message); }
     private AgentRuntime with(ModelPort model) { return new AgentRuntime(model, tools, harness); }
 
+    private Snapshot await(RunState run) throws InterruptedException {
+        long end = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
+        while (!com.dokitv.agent.core.AgentTypes.terminal(run.snapshot().status()) && System.nanoTime() < end) Thread.sleep(10);
+        return run.snapshot();
+    }
+    @Test void httpEntryCanDirectlyDeliverFaq() throws Exception {
+        String body = mvc.perform(post("/api/agent/runs").header("Authorization", "Bearer demo-alice")
+                .contentType("application/json;charset=UTF-8").content("{\"message\":\"你能做什么\"}"))
+                .andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString();
+        UUID id = UUID.fromString(new com.fasterxml.jackson.databind.ObjectMapper().readTree(body).get("runId").asText());
+        Snapshot snapshot = await(runs.owned(id, alice()));
+        assertEquals(com.dokitv.agent.core.PreparationTypes.Route.FAQ, snapshot.route());
+        assertEquals("demo-capabilities", snapshot.faqId()); assertEquals("1", snapshot.faqVersion());
+        assertEquals(Status.SUCCEEDED, snapshot.status()); assertEquals(0, snapshot.modelCalls());
+    }
+    @Test void serviceEntryClarifiesBeforeHarness() throws Exception {
+        Snapshot snapshot = await(runs.create("查询视频1001的弹幕数", alice()));
+        assertEquals(Status.NEEDS_INPUT, snapshot.status());
+        assertEquals(com.dokitv.agent.core.PreparationTypes.Route.CLARIFY, snapshot.route());
+        assertEquals(0, snapshot.steps()); assertEquals(0, snapshot.modelCalls());
+    }
+    @Test void serviceEntryPassesPreparedQueryToHarnessWithOwnedEvidence() throws Exception {
+        String message = "  查询视频1001昨天的弹幕数  ";
+        RunState run = runs.create(message, alice()); Snapshot snapshot = await(run);
+        assertEquals(Status.SUCCEEDED, snapshot.status());
+        assertEquals(com.dokitv.agent.core.PreparationTypes.Route.HARNESS, snapshot.route());
+        assertEquals(message, snapshot.preparation().originalQuery());
+        assertEquals(message.strip(), snapshot.preparation().query());
+        assertEquals(3, snapshot.steps()); assertFalse(snapshot.answer().evidenceIds().isEmpty());
+    }
+
     @Test void demoCompletesWithOwnedEvidence() {
         RunState run = run("查询视频1001昨天的弹幕数");
         runtime.execute(run);
         assertEquals(Status.SUCCEEDED, run.snapshot().status());
         assertEquals(3, run.snapshot().steps());
-        Evidence evidence = run.evidence.get(run.snapshot().answer().evidenceIds().get(0));
+        Evidence evidence = run.execution().evidence().get(run.snapshot().answer().evidenceIds().get(0));
         assertEquals(128L, evidence.data().value());
         assertTrue(evidence.data().demo());
         assertEquals(run.id, evidence.runId());
@@ -48,7 +79,7 @@ class AgentRuntimeTest {
         RunState run = run("查询视频1002昨天的弹幕数");
         runtime.execute(run);
         assertEquals("FORBIDDEN", run.snapshot().errorCode());
-        assertTrue(run.evidence.isEmpty());
+        assertTrue(run.execution().evidence().isEmpty());
     }
     @Test void toolCannotRunBeforeSkillActivation() {
         RunState run = run("x");

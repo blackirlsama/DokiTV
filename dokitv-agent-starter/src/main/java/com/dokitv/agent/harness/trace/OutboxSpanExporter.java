@@ -44,7 +44,7 @@ public final class OutboxSpanExporter implements SpanExporter {
         boolean success = true;
         for (SpanData span : spans) {
             try {
-                TraceEnvelope event = TraceEnvelope.from(span, "dokitv-operations-agent", "0.3.0");
+                TraceEnvelope event = TraceEnvelope.from(span, "dokitv-operations-agent", "0.7.0");
                 spool.append(mapper.writeValueAsString(event));
                 stats.enqueued.increment();
             } catch (Exception e) {

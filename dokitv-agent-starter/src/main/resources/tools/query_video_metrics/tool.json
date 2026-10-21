@@ -1,0 +1,14 @@
+{
+  "name":"query_video_metrics",
+  "description":"Query a completed day of video bullet counts; only authorized videos are allowed",
+  "inputSchema":{
+    "type":"object",
+    "properties":{
+      "video_id":{"type":"integer","minimum":1},
+      "date":{"type":"string","format":"date"},
+      "metric":{"type":"string","enum":["bullet_count"]}
+    },
+    "required":["date","metric","video_id"],
+    "additionalProperties":false
+  }
+}

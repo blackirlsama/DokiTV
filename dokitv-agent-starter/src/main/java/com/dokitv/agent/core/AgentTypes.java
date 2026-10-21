@@ -2,7 +2,8 @@ package com.dokitv.agent.core;
 
 import java.time.*;
 import java.util.*;
-import com.dokitv.agent.runtime.control.StopReason;
+import com.dokitv.agent.core.TaskTypes.PreparedTask;
+import com.dokitv.agent.core.PreparationTypes.*;
 
 /** Shared contracts. Business adapters and model adapters depend on these types. */
 public final class AgentTypes {
@@ -32,7 +33,19 @@ public final class AgentTypes {
     public record ModelContext(String message, LocalDate businessDate, AccessScope scope,
                                Set<String> activeSkills, List<ToolResult> observations,
                                List<ToolDefinition> availableTools, int remainingSteps,
-                               boolean finalizing, String systemDirective) {
+                               boolean finalizing, String systemDirective, PreparedRequest preparation, PreparedTask task, MemoryTypes.View memory) {
+        public ModelContext(String message, LocalDate date, AccessScope scope, Set<String> skills,
+                            List<ToolResult> results, List<ToolDefinition> tools, int remaining, boolean finalizing, String directive, PreparedRequest preparation, PreparedTask task) {
+            this(message, date, scope, skills, results, tools, remaining, finalizing, directive, preparation, task, MemoryTypes.View.empty());
+        }
+        public ModelContext(String message, LocalDate date, AccessScope scope, Set<String> skills,
+                            List<ToolResult> results, List<ToolDefinition> tools, int remaining, boolean finalizing, String directive, PreparedRequest preparation) {
+            this(message, date, scope, skills, results, tools, remaining, finalizing, directive, preparation, null);
+        }
+        public ModelContext(String message, LocalDate date, AccessScope scope, Set<String> skills,
+                            List<ToolResult> results, List<ToolDefinition> tools, int remaining, boolean finalizing, String directive) {
+            this(message, date, scope, skills, results, tools, remaining, finalizing, directive, null);
+        }
         public ModelContext(String message, LocalDate date, AccessScope scope, Set<String> skills,
                             List<ToolResult> results, List<ToolDefinition> tools, int remaining) {
             this(message, date, scope, skills, results, tools, remaining, false, "");
@@ -63,7 +76,8 @@ public final class AgentTypes {
     public record Event(long sequence, String type, Object data, Instant at) {}
     public record Snapshot(UUID runId, Status status, Instant createdAt, int steps,
                            Answer answer, String clarification, String errorCode, String traceId,
-                           StopReason stopReason, int modelCalls) {}
+                           StopReason stopReason, int modelCalls, Route route, String faqId, String faqVersion, PreparedRequest preparation, PreparedTask task,
+                           int preparationCalls, int totalModelCalls, UUID sessionId, long turnSeq) {}
     public static boolean terminal(Status status) {
         return status != Status.QUEUED && status != Status.RUNNING;
     }

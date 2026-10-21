@@ -37,7 +37,8 @@ final class TransformInvariants {
             require(context.scope().equals(original.scope()) && context.activeSkills().equals(original.activeSkills())
                     && context.remainingSteps() == original.remainingSteps() && context.businessDate().equals(original.businessDate())
                     && context.message().equals(original.message()) && context.finalizing() == original.finalizing()
-                    && Objects.equals(context.systemDirective(), original.systemDirective()));
+                    && Objects.equals(context.systemDirective(), original.systemDirective())
+                    && Objects.equals(context.preparation(), original.preparation()) && Objects.equals(context.task(), original.task()) && Objects.equals(context.memory(), original.memory()));
             require(new HashSet<>(context.availableTools()).size() == context.availableTools().size()
                     && original.availableTools().containsAll(context.availableTools()));
             Set<Integer> used = new HashSet<>();

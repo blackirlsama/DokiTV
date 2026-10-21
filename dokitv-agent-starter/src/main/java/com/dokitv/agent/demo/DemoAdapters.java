@@ -9,11 +9,36 @@ import org.springframework.context.annotation.*;
 import java.time.*;
 import java.util.*;
 import java.util.regex.Pattern;
+import com.dokitv.agent.preparation.*;
+import com.dokitv.agent.core.PreparationTypes.*;
+import com.dokitv.agent.runtime.control.CallControl;
 
 /** Offline fixtures only. No DokiTV database, remote credentials or LLM is used. */
 @Configuration
 @Profile("demo")
 public class DemoAdapters {
+    /** Offline fixtures for the small-model port. Replace all three methods in an integration profile. */
+    @Bean @Profile("!deepseek") PreparationModelPort demoPreparationModel() {
+        return new PreparationModelPort() {
+            public Emotion emotion(Input input, CallControl control) {
+                control.checkpoint();
+                return input.query().contains("太差") || input.query().contains("生气") ? Emotion.NEGATIVE : Emotion.NEUTRAL;
+            }
+            public Clarification clarify(Input input, CallControl control) {
+                control.checkpoint();
+                String text = input.query();
+                if (!Pattern.compile("视频\\s*\\d+").matcher(text).find() || !text.contains("弹幕"))
+                    return new Clarification(true, "演示模式支持单视频弹幕数查询，请提供视频ID、日期和要查询的指标。");
+                if (!text.contains("昨天") && !Pattern.compile("\\d{4}-\\d{2}-\\d{2}").matcher(text).find())
+                    return new Clarification(true, "请指定一个 YYYY-MM-DD 格式的日期，或使用“昨天”。");
+                return new Clarification(false, null);
+            }
+            public String rewrite(Input input, CallControl control) {
+                control.checkpoint();
+                return input.query().strip().replaceAll("\\s+", " ");
+            }
+        };
+    }
     @Bean IdentityPort demoIdentity() {
         return credential -> switch (credential == null ? "" : credential) {
             case "demo-alice" -> new AccessScope("demo", "alice", Set.of(1001L));
@@ -31,7 +56,7 @@ public class DemoAdapters {
                     "bullet-count-demo-v1", "synthetic-fixture", Instant.now(), "Asia/Shanghai", true, true);
         };
     }
-    @Bean ModelPort scriptedDemoModel() {
+    @Bean @Profile("!deepseek") ModelPort scriptedDemoModel() {
         return context -> {
             var id = Pattern.compile("视频\\s*(\\d+)").matcher(context.message());
             if (!id.find() || !context.message().contains("弹幕"))

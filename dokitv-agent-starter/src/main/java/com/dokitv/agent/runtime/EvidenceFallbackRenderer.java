@@ -8,7 +8,7 @@ import java.util.*;
 public final class EvidenceFallbackRenderer {
     private EvidenceFallbackRenderer() {}
     public static Answer render(RunState run) {
-        List<Evidence> evidence = run.evidence.values().stream().filter(item -> item.runId().equals(run.id)
+        List<Evidence> evidence = run.execution().evidence().snapshot().values().stream().filter(item -> item.runId().equals(run.id)
                 && item.owner().equals(run.owner) && run.owner.videoIds().contains(item.data().videoId())
                 && item.data().complete() && item.data().value() >= 0 && item.data().metric().equals("bullet_count")
                 && item.data().timezone().equals("Asia/Shanghai"))
