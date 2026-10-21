@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tianmu Harness TraceEnvelope v1.0",
+  "type": "object",
+  "required": ["schemaVersion", "eventId", "serviceName", "serviceVersion", "traceId", "spanId", "parentSpanId", "name", "kind", "startTimeUnixNano", "endTimeUnixNano", "durationNanos", "status", "attributes"],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "eventId": {"type": "string", "format": "uuid"},
+    "serviceName": {"type": "string"},
+    "serviceVersion": {"type": "string"},
+    "traceId": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "spanId": {"type": "string", "pattern": "^[0-9a-f]{16}$"},
+    "parentSpanId": {"type": "string", "pattern": "^[0-9a-f]{16}$"},
+    "name": {"type": "string", "pattern": "^[a-zA-Z0-9_.-]{1,120}$"},
+    "kind": {"enum": ["INTERNAL", "SERVER", "CLIENT", "PRODUCER", "CONSUMER"]},
+    "startTimeUnixNano": {"type": "integer", "minimum": 0},
+    "endTimeUnixNano": {"type": "integer", "minimum": 0},
+    "durationNanos": {"type": "integer", "minimum": 0},
+    "status": {"enum": ["UNSET", "OK", "ERROR"]},
+    "attributes": {
+      "type": "object",
+      "maxProperties": 32,
+      "additionalProperties": {"oneOf": [{"type": "string", "maxLength": 160}, {"type": "integer"}, {"type": "boolean"}]}
+    }
+  },
+  "additionalProperties": true
+}
