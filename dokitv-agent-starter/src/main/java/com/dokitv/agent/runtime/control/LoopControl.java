@@ -1,5 +1,7 @@
 package com.dokitv.agent.runtime.control;
 
+import com.dokitv.agent.core.StopReason;
+
 import com.dokitv.agent.core.AgentException;
 import com.dokitv.agent.runtime.RunState;
 import java.time.*;
@@ -16,7 +18,7 @@ public final class LoopControl implements AutoCloseable {
     private static Thread daemon(Runnable task, String name) { Thread thread = new Thread(task, name); thread.setDaemon(true); return thread; }
     public LoopPolicy policy() { return policy; }
     public void arm(RunState run) {
-        if (!run.bindControl(policy.requestTimeout())) return;
+        if (!run.bindControl(policy.requestTimeout(), policy.maxModelCalls())) return;
         long millis = Math.max(0, Duration.between(Instant.now(), run.deadline()).toMillis());
         ScheduledFuture<?> deadline = timer.schedule(run::timeout, millis, TimeUnit.MILLISECONDS);
         run.onTerminal(snapshot -> deadline.cancel(false));

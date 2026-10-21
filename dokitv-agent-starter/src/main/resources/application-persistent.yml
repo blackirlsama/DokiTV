@@ -1,0 +1,12 @@
+agent:
+  storage:
+    mode: mysql
+    jdbc-url: ${AGENT_JDBC_URL:}
+    username: ${AGENT_DB_USER:}
+    password: ${AGENT_DB_PASSWORD:}
+    object-directory: ${AGENT_OBJECT_DIRECTORY:./var/artifacts}
+    redis:
+      enabled: ${AGENT_REDIS_ENABLED:true}
+      host: ${AGENT_REDIS_HOST:127.0.0.1}
+      port: ${AGENT_REDIS_PORT:6379}
+      password: ${AGENT_REDIS_PASSWORD:}

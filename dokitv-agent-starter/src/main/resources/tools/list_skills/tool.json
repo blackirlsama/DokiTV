@@ -1,0 +1,5 @@
+{
+  "name":"list_skills",
+  "description":"List skill names and descriptions",
+  "inputSchema":{"type":"object","properties":{},"required":[],"additionalProperties":false}
+}

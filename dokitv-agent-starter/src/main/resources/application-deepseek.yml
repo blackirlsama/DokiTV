@@ -1,0 +1,18 @@
+agent:
+  models:
+    base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+    api-key: ${DEEPSEEK_API_KEY:}
+    preparation-model: ${PREPARATION_MODEL:deepseek-flash}
+    harness-model: ${HARNESS_MODEL:deepseek-v4-pro}
+    connect-timeout: 3s
+    preparation-max-tokens: 384
+    harness-max-tokens: 1536
+  preparation:
+    parallel-timeout: 10s
+    rewrite-timeout: 8s
+    emotion-timeout: 3s
+harness:
+  loop:
+    request-timeout: 120s
+    model-timeout: 30s
+    finalize-timeout: 15s

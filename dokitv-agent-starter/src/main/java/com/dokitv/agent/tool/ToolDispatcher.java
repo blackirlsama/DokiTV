@@ -2,107 +2,88 @@ package com.dokitv.agent.tool;
 
 import com.dokitv.agent.core.AgentException;
 import com.dokitv.agent.core.AgentTypes.*;
-import com.dokitv.agent.query.BusinessQueryPort;
+import com.dokitv.agent.harness.RuntimeHarness;
 import com.dokitv.agent.runtime.RunState;
 import com.dokitv.agent.skill.SkillCatalog;
 import org.springframework.stereotype.Component;
-import java.math.BigDecimal;
-import java.time.*;
+import java.time.DateTimeException;
 import java.util.*;
-import com.dokitv.agent.harness.RuntimeHarness;
 import com.dokitv.agent.harness.hook.HookPoint;
+import com.dokitv.agent.runtime.control.CallControl;
+import java.time.*;
+import java.util.function.Function;
 
+/** Fixed admission boundary; tool implementations register independently of this dispatcher. */
 @Component
 public class ToolDispatcher {
     private final SkillCatalog skills;
-    private final BusinessQueryPort queries;
     private final RuntimeHarness harness;
-    public ToolDispatcher(SkillCatalog skills, BusinessQueryPort queries, RuntimeHarness harness) {
-        this.skills = skills;
-        this.queries = queries;
-        this.harness = harness;
+    private final ToolRegistry registry;
+    @org.springframework.beans.factory.annotation.Autowired
+    public ToolDispatcher(SkillCatalog skills, RuntimeHarness harness, ToolRegistry registry) {
+        this.skills = skills; this.harness = harness; this.registry = registry;
     }
-    public List<ToolDefinition> definitions(Set<String> activeSkills) {
-        List<ToolDefinition> definitions = new ArrayList<>();
-        definitions.add(definition("list_skills", "List skill names and descriptions", Map.of()));
-        definitions.add(definition("read_skill", "Read instructions and activate skill tools",
-                Map.of("name", Map.of("type", "string", "enum", List.of("video-metrics")))));
-        definitions.add(definition("read_result", "Read evidence owned by the current run",
-                Map.of("result_id", Map.of("type", "string"))));
-        if (activeSkills.contains("video-metrics")) definitions.add(definition("query_video_metrics",
-                "Query a completed day of video bullet counts; only authorized videos are allowed",
-                Map.of("video_id", Map.of("type", "integer", "minimum", 1),
-                       "date", Map.of("type", "string", "format", "date"),
-                       "metric", Map.of("type", "string", "enum", List.of("bullet_count")))));
-        return List.copyOf(definitions);
-    }
-    private ToolDefinition definition(String name, String description, Map<String, Object> properties) {
-        return new ToolDefinition(name, description, Map.of("type", "object", "properties", properties,
-                "required", properties.keySet().stream().sorted().toList(), "additionalProperties", false));
-    }
+    public List<ToolDefinition> definitions(Set<String> activeSkills) { return registry.definitions(activeSkills); }
     public ToolResult execute(ToolCall call, RunState run) {
         run.checkpoint();
-        ToolResult result;
+        AgentTool tool = registry.get(call.name());
+        if (run.task() != null && !run.task().allowedTools().contains(call.name()))
+            throw new AgentException("TOOL_NOT_AVAILABLE", "Tool is outside the prepared capability ceiling");
+        if (tool.requiresSkill()) skills.checkTool(call.name(), run.execution().activeSkills());
         try {
-            result = switch (call.name()) {
-                case "list_skills" -> {
-                    exact(call.arguments(), Set.of());
-                    yield new ToolResult(call.name(), Map.of("skills", skills.list()), null);
-                }
-                case "read_skill" -> {
-                    exact(call.arguments(), Set.of("name"));
-                    Skill skill = skills.read(text(call, "name"));
-                    yield harness.stage(run, "agent.skill", HookPoint.PRE_SKILL, HookPoint.POST_SKILL,
-                            Map.of("skill.name", skill.name(), "skill.version", skill.version()), () -> {
-                        run.activeSkills.add(skill.name());
-                        return new ToolResult(call.name(), Map.of("skill", skill, "tool_schemas",
-                                definitions(run.activeSkills).stream().filter(t -> skill.tools().contains(t.name())).toList()), null);
-                    });
-                }
-                case "read_result" -> {
-                    exact(call.arguments(), Set.of("result_id"));
-                    Evidence evidence = run.evidence.get(text(call, "result_id"));
-                    if (evidence == null || !evidence.owner().equals(run.owner) || !evidence.runId().equals(run.id))
-                        throw new AgentException("RESULT_NOT_FOUND", "Result is not accessible in this run");
-                    yield new ToolResult(call.name(), Map.of("metric", evidence.data()), evidence.id());
-                }
-                case "query_video_metrics" -> metric(call, run);
-                default -> throw new AgentException("TOOL_NOT_FOUND", "Tool is not registered");
-            };
+            ToolArguments.validate(call, registry.definition(call.name()));
+            ToolResult result = tool.execute(call, new HostContext(run, tool));
+            run.checkpoint();
+            if (result == null || !call.name().equals(result.tool())) throw new AgentException("INVALID_TOOL_RESULT", "Tool result does not match the registered handler");
+            return result;
         } catch (IllegalArgumentException | DateTimeException | ArithmeticException e) {
             throw new AgentException("INVALID_ARGUMENTS", "Tool arguments are invalid");
         }
-        run.checkpoint();
-        return result;
     }
-    private ToolResult metric(ToolCall call, RunState run) {
-        skills.checkTool(call.name(), run.activeSkills);
-        exact(call.arguments(), Set.of("video_id", "date", "metric"));
-        long videoId = new BigDecimal(call.arguments().get("video_id").toString()).longValueExact();
-        if (!run.owner.videoIds().contains(videoId)) throw new AgentException("FORBIDDEN", "Out-of-scope video");
-        LocalDate date = LocalDate.parse(text(call, "date"));
-        LocalDate today = LocalDate.now(ZoneId.of("Asia/Shanghai"));
-        if (date.isBefore(today.minusDays(30)) || !date.isBefore(today))
-            throw new AgentException("DATE_OUT_OF_RANGE", "Only completed days within the previous 30 days are supported");
-        MetricQuery query = new MetricQuery(videoId, date, text(call, "metric"));
-        MetricData data = harness.toolCall(run, control -> queries.query(query, run.owner, control));
-        run.checkpoint();
-        if (data.videoId() != videoId || !data.date().equals(date) || !data.metric().equals(query.metric())
-                || !data.complete() || !data.timezone().equals("Asia/Shanghai"))
-            throw new AgentException("INVALID_EVIDENCE", "Query adapter returned inconsistent or incomplete evidence");
-        String evidenceId = "ev_" + UUID.randomUUID();
-        run.evidence.put(evidenceId, new Evidence(evidenceId, run.id, run.owner, data));
-        return new ToolResult(call.name(), Map.of("video_id", videoId, "date", date.toString(),
-                "metric", data.metric(), "value", data.value(), "metric_version", data.metricVersion(),
-                "source", data.source(), "data_as_of", data.dataAsOf().toString(),
-                "complete", data.complete(), "demo", data.demo(), "evidence_id", evidenceId), evidenceId);
-    }
-    private static void exact(Map<String, Object> arguments, Set<String> expected) {
-        if (!arguments.keySet().equals(expected)) throw new AgentException("INVALID_ARGUMENTS", "Unexpected or missing tool fields");
-    }
-    private static String text(ToolCall call, String field) {
-        Object value = call.arguments().get(field);
-        if (!(value instanceof String text) || text.isBlank()) throw new AgentException("INVALID_ARGUMENTS", "Expected nonempty text");
-        return text;
+    private final class HostContext implements ToolContext {
+        private final RunState run; private final AgentTool tool;
+        HostContext(RunState run, AgentTool tool) { this.run = run; this.tool = tool; }
+        public UUID runId() { return run.id; }
+        public AccessScope scope() { return run.owner; }
+        public LocalDate businessDate() { return run.businessDate; }
+        public void checkpoint() { run.checkpoint(); }
+        public List<Map<String, String>> listSkills() { return skills.list(); }
+        public Skill activateSkill(String name) {
+            if (!tool.canActivateSkills()) throw new AgentException("TOOL_CAPABILITY_DENIED", "Tool cannot activate skills");
+            Skill skill = skills.read(name);
+            return harness.stage(run, "agent.skill", HookPoint.PRE_SKILL, HookPoint.POST_SKILL,
+                    Map.of("skill.name", name, "skill.version", skill.version()), () -> { run.execution().activateSkill(name); return skill; });
+        }
+        public List<ToolDefinition> definitionsForSkill(String name) {
+            Skill skill = skills.read(name);
+            return registry.definitions(run.execution().activeSkills()).stream().filter(d -> skill.tools().contains(d.name()))
+                    .filter(d -> run.task() == null || run.task().allowedTools().contains(d.name())).toList();
+        }
+        public Evidence evidence(String id) {
+            Evidence value = run.execution().evidence().get(id);
+            if (value == null || !value.owner().equals(run.owner) || !value.runId().equals(run.id))
+                throw new AgentException("RESULT_NOT_FOUND", "Result is not accessible in this run");
+            return value;
+        }
+        public void checkQuery(MetricQuery query) {
+            checkpoint();
+            if (!scope().videoIds().contains(query.videoId())) throw new AgentException("FORBIDDEN", "Out-of-scope video");
+            if (query.date().isBefore(businessDate().minusDays(30)) || !query.date().isBefore(businessDate()))
+                throw new AgentException("DATE_OUT_OF_RANGE", "Only completed days within the previous 30 days are supported");
+            if (run.task() != null && run.task().specification().type().equals("video.metric")) {
+                Map<String, Object> expected = run.task().specification().conditions();
+                if (((Number) expected.get("video_id")).longValue() != query.videoId() || !expected.get("date").equals(query.date().toString())
+                        || !expected.get("metric").equals(query.metric())) throw new AgentException("TASK_CONSTRAINT_VIOLATION", "Tool query changed the prepared task conditions");
+            }
+        }
+        public Evidence registerEvidence(MetricData data) {
+            checkpoint();
+            if (!data.complete() || !"Asia/Shanghai".equals(data.timezone()) || data.value() < 0)
+                throw new AgentException("INVALID_EVIDENCE", "Query adapter returned incomplete or inconsistent evidence");
+            checkQuery(new MetricQuery(data.videoId(), data.date(), data.metric()));
+            Evidence value = new Evidence("ev_" + UUID.randomUUID(), run.id, run.owner, data);
+            run.execution().evidence().put(value); return value;
+        }
+        public <T> T query(Function<CallControl, T> operation) { return harness.toolCall(run, operation); }
     }
 }

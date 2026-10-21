@@ -1,5 +1,7 @@
 package com.dokitv.agent.runtime.control;
 
+import com.dokitv.agent.core.StopReason;
+
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 

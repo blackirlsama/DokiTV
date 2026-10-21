@@ -63,5 +63,5 @@ public class TraceConfiguration {
                 AttributeKey.stringKey("service.name"), "dokitv-operations-agent")))
                 .addSpanProcessor(SimpleSpanProcessor.create(exporter)).build();
     }
-    @Bean Tracer harnessTracer(SdkTracerProvider provider) { return provider.get("com.dokitv.agent.harness", "0.3.0"); }
+    @Bean Tracer harnessTracer(SdkTracerProvider provider) { return provider.get("com.dokitv.agent.harness", "0.7.0"); }
 }

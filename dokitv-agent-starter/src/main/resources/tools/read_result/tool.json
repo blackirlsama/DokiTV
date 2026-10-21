@@ -1,0 +1,5 @@
+{
+  "name":"read_result",
+  "description":"Read evidence owned by the current run",
+  "inputSchema":{"type":"object","properties":{"result_id":{"type":"string","minLength":1}},"required":["result_id"],"additionalProperties":false}
+}

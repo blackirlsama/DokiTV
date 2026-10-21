@@ -94,7 +94,7 @@ class TransformHookTest {
             RunState run = fixture.run();
             fixture.execute(run, context -> Decision.tool("read_skill", Map.of("name", "video-metrics")));
             assertEquals("TOOL_NOT_AVAILABLE", run.snapshot().errorCode());
-            assertTrue(run.activeSkills.isEmpty());
+            assertTrue(run.execution().activeSkills().isEmpty());
         }
     }
     @Test void rewrittenToolArgumentsStillPassThroughMandatoryPermissionChecks() {
@@ -105,7 +105,7 @@ class TransformHookTest {
         });
         try (var fixture = new HarnessLifecycleTest.Fixture(List.of(transform))) {
             RunState run = fixture.run();
-            run.activeSkills.add("video-metrics");
+            run.execution().activateSkill("video-metrics");
             fixture.execute(run, context -> query());
             assertEquals("FORBIDDEN", run.snapshot().errorCode());
             assertEquals(0, fixture.queries.get());
@@ -119,7 +119,7 @@ class TransformHookTest {
         });
         try (var fixture = new HarnessLifecycleTest.Fixture(List.of(transform))) {
             RunState run = fixture.run();
-            run.activeSkills.add("video-metrics");
+            run.execution().activateSkill("video-metrics");
             fixture.execute(run, context -> Decision.tool("query_video_metrics", Map.of("video_id",
                     context.observations().isEmpty() ? "1001" : 1001L, "date", yesterday(), "metric", "bullet_count")));
             assertEquals("NO_PROGRESS", run.snapshot().errorCode());
@@ -143,7 +143,7 @@ class TransformHookTest {
     @Test void answerFormattingPreservesEvidenceAndTamperingBlocksDelivery() {
         try (var fixture = new HarnessLifecycleTest.Fixture(List.of(new AnswerFormattingHook()))) {
             RunState run = fixture.run();
-            run.activeSkills.add("video-metrics");
+            run.execution().activateSkill("video-metrics");
             fixture.execute(run, context -> context.observations().isEmpty() ? query() : Decision.answer("  summary  ",
                     List.of(context.observations().get(0).evidenceId())));
             assertEquals(Status.SUCCEEDED, run.snapshot().status());

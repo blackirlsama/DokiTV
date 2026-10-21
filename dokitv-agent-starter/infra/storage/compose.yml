@@ -1,0 +1,29 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: dokitv_agent
+      MYSQL_USER: agent
+      MYSQL_PASSWORD: ${AGENT_DB_PASSWORD:?Set AGENT_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${AGENT_MYSQL_ROOT_PASSWORD:?Set AGENT_MYSQL_ROOT_PASSWORD}
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "--silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7.4
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+volumes:
+  mysql-data:

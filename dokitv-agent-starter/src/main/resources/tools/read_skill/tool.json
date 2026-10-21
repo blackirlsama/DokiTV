@@ -1,0 +1,5 @@
+{
+  "name":"read_skill",
+  "description":"Read instructions and activate skill tools",
+  "inputSchema":{"type":"object","properties":{"name":{"type":"string","minLength":1}},"required":["name"],"additionalProperties":false}
+}

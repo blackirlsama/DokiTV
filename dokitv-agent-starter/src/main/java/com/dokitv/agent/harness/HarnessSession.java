@@ -63,7 +63,13 @@ public final class HarnessSession {
         if (snapshot == null || workers.get() != 0 || !ended.compareAndSet(false, true)) return;
         try (Scope scope = context.makeCurrent(); TraceLogScope mdc = new TraceLogScope(root, run.id.toString())) {
             TraceAttributes.apply(root, Map.of("run.status", snapshot.status().name(), "run.steps", snapshot.steps(),
-                    "run.stop_reason", snapshot.stopReason().name(), "run.model_calls", snapshot.modelCalls()));
+                    "run.stop_reason", snapshot.stopReason().name(), "run.model_calls", snapshot.modelCalls(),
+                    "run.preparation_calls", snapshot.preparationCalls(), "run.total_model_calls", snapshot.totalModelCalls()));
+            if (snapshot.route() != null) TraceAttributes.apply(root, Map.of("request.route", snapshot.route().name(),
+                    "preparation.emotion", snapshot.preparation().emotion().name(),
+                    "preparation.degraded_count", snapshot.preparation().degradedStages().size(),
+                    "preparation.skipped_count", snapshot.preparation().skippedStages().size()));
+            if (snapshot.faqId() != null) TraceAttributes.apply(root, Map.of("faq.id", snapshot.faqId(), "faq.version", snapshot.faqVersion()));
             if (snapshot.status() == Status.FAILED) root.setStatus(StatusCode.ERROR);
             fire(HookPoint.REQUEST_END, Map.of("run.status", snapshot.status().name(), "run.steps", snapshot.steps()));
         } finally { root.end(); }
