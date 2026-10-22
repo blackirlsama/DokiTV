@@ -1,135 +1,226 @@
-# Tianmu 运营 Agent 基架
+# Tianmu 运营 Agent
 
-Java 17 / Spring Boot 3.5.4。面向同学协作的独立后端工程，使用分包式单体结构。
+**视频运营问答的独立 Java 服务，负责问题准备、受控执行与证据交付。**
 
-**当前为开发预览版：默认 Demo 免 Key；business profile 已提供真实 JWT/Redis 身份、视频授权和 SQL 查询适配器。隔离库与一个真实模型场景已验证，正式业务环境仍待验收。**
+[项目首页](../README.md) · [部署说明](../docs/DEPLOYMENT.md) · [API 契约](docs/接口契约.md) · [贡献指南](../CONTRIBUTING.md)
 
-最新入口：[根 README](../README.md) · [部署说明](../docs/DEPLOYMENT.md) · [P0 业务接入](docs/P0业务接入.md) · [P0 验收](docs/P0业务接入验收.md) · [贡献指南](../CONTRIBUTING.md)。
-默认只绑定 `127.0.0.1:8201`。演示身份是公开固定凭证，不能直接部署到公网。
+本模块使用 Java 17 / Spring Boot 3.5.4，拥有独立 `pom.xml`，可单独构建和运行。默认 Demo 无需模型 Key 或中间件；启用相应 profile 后，可使用真实模型、业务身份与数据、MySQL / Redis 持久化。
 
-## 先看什么
+当前为开发预览版。对外 API 与内部扩展契约仍可能调整；持久化模式每个数据库仅允许一个 Agent 写实例。
 
-- [持久化存储接入](docs/持久化存储接入.md)：v0.7 的实际配置、启动、会话/续接、幂等、对象与恢复边界。
-- [全流程模拟验收](docs/全流程模拟验收.md)：可重复运行的 HTTP 模型模拟器、真实存储和故障分支验证。
+## 本地开发
 
-- [工程目录与扩展规范](docs/工程目录与扩展规范.md)：v0.6 的资源目录、受限 ToolContext 与扩展步骤。
-- [统一入口与并行预处理](docs/统一入口与并行预处理.md)：v0.6 的串并行顺序、PreparedTask、超时、取消和交付边界。
-- [DeepSeek 模型接入](docs/DeepSeek模型接入.md)：共用 Key，Flash 跑预处理，V4 Pro 跑 Harness；环境变量和启用方式。
-- [项目进度](docs/项目进度.md)：截至 2026-10-22 的已验证能力、实际边界和下一阶段分工。
-- [上下文与记忆管理设计](docs/上下文与记忆管理设计.md)：新参考材料的吸收与修正，尚未实现。
-- [架构与分工方案](docs/架构与分工方案.md)：可以直接发给同学，说明目标、范围、负责人和验收标准。
-- [接口契约](docs/接口契约.md)：公共类型、HTTP、SSE、工具、证据及错误码。
-- [验证记录](docs/验证记录.md)：已做验证与尚未验证的范围。
-- [Harness Trace 与 Hook 设计](docs/Harness-Trace与Hook设计.md)：扩展接口、Kafka 配置、缓冲与投递语义。
-- [Hook 变换链设计](docs/Hook变换链设计.md)：v0.3 的类型化链式处理、默认插件与固定校验。
-- [请求准备与任务包设计](docs/请求准备与任务包设计.md)：参考设计；任务包已在 v0.6 落地，其他内容按进度说明区分。
+从仓库根目录执行：
 
-## 快速启动
+```sh
+mvn -B -f tianmu-agent/pom.xml verify
+java -jar tianmu-agent/target/operations-agent-0.7.0-SNAPSHOT.jar
+```
 
-需要 JDK 17、Maven 3.6.3 或更新版本。首次启动需下载 Maven 依赖。
-
-Windows PowerShell，在工程根目录执行：
+也可以在本模块目录执行 `mvn test` 或 `mvn spring-boot:run`。Windows 开发脚本会查找 `JAVA_HOME` 和用户 `.jdks` 中的 JDK 17：
 
 ```powershell
+# 在 tianmu-agent 目录执行
 .\scripts\dev.ps1 -Action test
 .\scripts\dev.ps1 -Action run
-# 如没有自动找到 JDK：
+# 手动指定 JDK
 .\scripts\dev.ps1 -Action run -JavaHome 'C:\path\to\jdk-17'
 ```
 
-脚本优先寻找 JAVA_HOME 与用户 `.jdks` 下的 JDK 17，只改变当前进程的环境变量。
-其他系统在正确配置 JAVA_HOME 后执行 `mvn test`、`mvn spring-boot:run`。
+默认地址为 `http://127.0.0.1:8201`。使用 `Bearer demo-alice` 提交 `{"message":"查询视频1001昨天的弹幕数"}` 到 `POST /api/agent/runs`，再按返回的 `runId` 查询状态或订阅事件。完整可复制命令见[项目首页](../README.md#快速开始)。
 
-执行 `mvn -B package` 后，可用 JDK 17 运行 `java -jar target/operations-agent-0.7.0-SNAPSHOT.jar`。
-默认使用模拟数据和本地地址。开发和提交代码请使用本模块源码。
+## 架构与执行契约
 
-## 跑一个完整请求
+### 请求准备
 
-以下命令在第二个 PowerShell 窗口执行：
+`RequestOrchestrator` 协调一次请求，但仅在准备结果为 `HARNESS` 时调用 `AgentRuntime`。
 
-```powershell
-$headers = @{ Authorization = 'Bearer demo-alice' }
-$payload = @{ message = '查询视频1001昨天的弹幕数' } | ConvertTo-Json
-$run = Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8201/api/agent/runs' `
-    -Headers $headers -ContentType 'application/json; charset=utf-8' `
-    -Body ([System.Text.Encoding]::UTF8.GetBytes($payload))
-$run.runId
+| 顺序 | 组件 | 行为 |
+| --- | --- | --- |
+| 1 | API / `RunService` | 校验身份和请求，确定资源范围，处理会话、幂等键与显式澄清续接，进入有界队列并开始总时限 |
+| 2 | Harness 输入与路由阶段 | 执行输入 Transform 和路由 Gate |
+| 3 | `PreparationService` / `FaqPort` | 先查 FAQ；命中后走统一交付，不调用模型 |
+| 4 | 历史与业务规则 | 加载授权范围内的历史视图；确定性规则发现缺条件时直接追问 |
+| 5 | `PreparationModelPort` | 对同一输入并行提交澄清判断、Query 改写、情绪识别 |
+| 6 | 预处理汇合 | 先判断澄清，再限时接纳改写；情绪仅取已完成结果。需要追问时取消其他分支 |
+| 7 | `TaskAssembler` | 创建不可变 `PreparedTask`，固定业务条件、权限、日期、资源版本、工具范围与预算 |
+| 8 | `AgentRuntime` / `DeliveryService` | 执行循环，统一校验答案并提交终态 |
 
-# 获取进度与最终答案
-curl.exe -N -H 'Authorization: Bearer demo-alice' "http://127.0.0.1:8201/api/agent/runs/$($run.runId)/events"
+澄清模型超时或结果不可用时保守追问；改写失败回原文；情绪未就绪为 UNKNOWN。权限与策略拒绝属于硬失败，不按普通可用性故障降级。详细时限与取消语义见[统一入口与并行预处理](docs/统一入口与并行预处理.md)。
 
-# 查询任务状态
-$result = Invoke-RestMethod -Headers $headers -Uri "http://127.0.0.1:8201/api/agent/runs/$($run.runId)"
-$result
-
-# 获取答案引用的证据
-$evidenceId = $result.answer.evidenceIds[0]
-Invoke-RestMethod -Headers $headers -Uri "http://127.0.0.1:8201/api/agent/runs/$($run.runId)/evidence/$evidenceId"
-
-# 取消任务；已结束任务保持原终态
-Invoke-RestMethod -Method Post -Headers $headers -Uri "http://127.0.0.1:8201/api/agent/runs/$($run.runId)/cancel"
-```
-
-预期执行：读取 `video-metrics` Skill → 查询模拟指标 → 引用证据回答。数字固定为 128，并明确标注模拟数据。
-
-- `demo-alice` 只能查询视频 1001；`demo-bob` 只能查询视频 1002。
-- “查询视频1001的弹幕数”会要求补充日期。
-- Alice 查询视频 1002 的任务以 `FORBIDDEN` 失败。
-- 支持“昨天”或最近 30 天内已结束日期，按 `Asia/Shanghai` 解释。
-- 演示模型是确定性脚本，只展示单视频弹幕计数流程；复杂分析问题尚不支持。
-
-## 源码入口
+### 主循环
 
 ```text
-com.tianmu.agent
-├── adapters/storage MySQL 工作单元 / Redis 视图 / 私有对象
-├── api        HTTP / SSE / 错误响应
-├── access     IdentityPort：可信身份边界
-├── core       共享类型与错误类型
-├── application TaskAssembler / DeliveryService
-├── runtime    RequestOrchestrator / Agent Loop / 任务状态 / 有界执行队列
-├── preparation FAQ 端口 / 小模型端口 / 有界并行与汇合
-├── model      ModelPort / DeepSeek 真实模型适配
-├── query      BusinessQueryPort：待同学接 Tianmu 查询服务
-├── skill      从独立 Skill 文件加载目录与说明
-├── prompt     Prompt 文件、索引与版本加载
-├── faq        FAQ 文件与精确匹配适配器
-├── resource   有界 UTF-8 / JSON 资源读取
-├── tool       工具注册与分发；builtin 下每个工具一个实现类
-├── demo       演示身份、脚本模型、合成数据
-└── harness    Hook SPI、OpenTelemetry、Kafka / 文件出口、持久化导出缓冲
+PreparedTask
+    → 构造 ModelContext / Context Transform
+    → ModelPort.decide
+    → 校验与变换 Decision
+        ├── ANSWER  → DeliveryService
+        ├── CLARIFY → DeliveryService
+        └── TOOL    → ToolDispatcher
+                        → Schema / Skill / 权限 / 固定任务条件校验
+                        → AgentTool.execute
+                        → 结果变换 / 证据登记 / 观察结果回填
+                        → 下一轮，或工具声明直接交付
 ```
 
-能力资源分别位于 src/main/resources/skills、tools、prompts、faq；模型指令、Skill 说明、工具 Schema 不再混写在 Java 执行逻辑中。当前为启动加载，修改资源后需重新打包或重启。
+模型只返回决策，不直接执行工具。`ToolContext` 不暴露可变 `RunState`、终态控制和 SSE 发送权。普通工具不能任意激活 Skill，允许激活的工具需显式声明能力。
 
-当前默认启用 `demo` profile。添加真实适配器时使用独立 profile（例如 `integration`），显式提供
-`IdentityPort`、`FaqPort`、`PreparationModelPort`、`ModelPort`、`BusinessQueryPort` 五个 Bean。
-非 demo 模式缺少实现会启动失败，避免悄悄降级成模拟数据。预处理与主循环模型独立适配；demo 下两者均为本地规则。
+轮次耗尽时，仅在已有证据且策略允许的情况下进行一次无工具收尾；收尾不能延长总截止时间。重复成功工具调用、连续可重试工具失败、调用次数耗尽和外部取消均有独立保护。SSE 断连不会自动取消任务，客户端应显式调用取消接口。
 
-已提供 DeepSeek 适配器。设置 DEEPSEEK_API_KEY 后，以 `--spring.profiles.active=demo,deepseek` 启动：
-三个预处理分支使用 deepseek-flash，主循环使用 deepseek-v4-pro，业务数据仍为模拟数据。
+### 包与依赖边界
 
-## 当前边界
-
-- 同一 POST 入口先查 FAQ，未命中并行情绪识别、澄清判断和 Query 改写；条件足够再进入 Harness。
-- 一个 Agent，一次一个工具调用；默认最多 6 轮，有证据时可额外无工具收尾一次；成功同参工具重复调用终止。
-- 总截止时间默认 30 秒，独立定时器覆盖排队和调用等待；模型/查询等待各 5 秒、收尾 3 秒。真实适配器仍需设置连接/读取超时并响应取消。
-- 已实现任务内 Skill 激活、权限范围、结果归属、证据 ID 校验；尚未实现逐条结论的事实核验。
-- SSE 支持事件序号、同进程内回放和 `Last-Event-ID`；断线不会自动取消后台任务。
-- 任务和证据存在内存，重启丢失；最多保留 200 个任务，创建新任务时清理创建超过一小时的终态任务。
-- 取消通过统一令牌唤醒服务端等待并阻止晚到交付；Java 无法强制结束不响应中断的远程调用线程。
-- 已有 OpenTelemetry Trace、Observer/Gate Hook、七类 Transform 链和 Kafka / 文件出口。默认写本地 `var/trace/archive/spans.jsonl`，Snapshot 返回 traceId。
-- 没有不可丢的持久化审计、费用核算、长期记忆、Q&A 缓存、RAG、Shell、报告渲染或生产级限流。
-- 任务存储仍在内存；Trace 的待发记录有独立持久化缓冲，不能用 Trace 恢复任务执行。
-
-这些是下一阶段的明确工作项，不能把本工程当作已完成的生产系统。
-
-## 启用持久化
-
-配置专用 MySQL 库的 AGENT_JDBC_URL / AGENT_DB_USER / AGENT_DB_PASSWORD、Redis 地址和 AGENT_OBJECT_DIRECTORY，然后执行：
-
-```powershell
-java -jar Tianmu-agent-demo.jar --spring.profiles.active=demo,persistent
+```text
+src/main/java/com/tianmu/agent/
+├── api/                 HTTP / SSE 与资源读取
+├── application/         TaskAssembler / MemoryBuilder / DeliveryService
+├── preparation/         FAQ / 并行预处理 / 条件与语义策略
+├── runtime/             请求编排、循环、任务状态与调度
+│   ├── control/         截止时间、取消、终态仲裁
+│   ├── events/          事件存储端口
+│   └── store/           仓储、证据与对象存储端口
+├── harness/
+│   ├── hook/            生命周期 Hook 与类型化 Transform
+│   └── trace/           OpenTelemetry / 文件 Outbox / TraceSink
+├── tool/                工具接口、目录、注册、校验与调度
+│   └── builtin/         内置工具实现
+├── skill/               Skill Catalog
+├── prompt/              Prompt Catalog
+├── access/              IdentityPort
+├── query/               BusinessQueryPort
+├── model/               ModelPort 与模型适配器
+│   └── deepseek/
+├── adapters/
+│   ├── business/        HTTP 业务身份与指标适配
+│   └── storage/         MySQL / Redis / 私有文件实现
+├── core/                决策、任务、证据、记忆等共享类型
+├── resource/            有界资源读取与解析
+└── demo/                脚本模型、模拟身份与指标
 ```
 
-应用通过 Flyway 建表及校验迁移。数据库故障不降级成内存成功；本版每个库只支持一个 Agent 写实例。详见 [持久化存储接入](docs/持久化存储接入.md)，或使用 [本地 MySQL/Redis Compose](infra/storage/compose.yml)。
+业务 SQL 位于根工程 `src/main/java/com/orangecode/tianmu/agentbridge/`，Agent 使用 `IdentityPort` / `BusinessQueryPort` 访问业务服务。接入其他业务时替换相应适配器，避免把业务数据库细节带入循环。
+
+## 资源与扩展开发
+
+### Skill、Tool 与 Prompt
+
+```text
+src/main/resources/
+├── skills/
+│   └── video-metrics/
+│       ├── SKILL.md             能力说明与使用约束
+│       └── skill.json           名称、版本与工具声明
+├── tools/
+│   ├── list_skills/tool.json
+│   ├── read_skill/tool.json
+│   ├── read_result/tool.json
+│   └── query_video_metrics/tool.json
+├── prompts/
+│   ├── index.json               Prompt ID、版本、资源路径
+│   ├── common/                  JSON 输出约束、当前问题焦点边界
+│   ├── preparation/             emotion / clarification / rewrite
+│   └── harness/                 system / finalize
+├── faq/                         Demo / 业务 FAQ
+├── db/migration/                Agent 专用 Flyway 迁移
+└── application*.yml             运行模式与环境配置
+```
+
+- **新增 Skill**：提供 `SKILL.md` 和 `skill.json`，引用已注册工具；新增可执行逻辑仍需实现工具。模型通过 `read_skill` 激活对应工具。
+- **新增 Tool**：实现 `AgentTool` 并注册 Spring Bean，在 `resources/tools/<name>/tool.json` 声明描述和参数 Schema；通过受限 `ToolContext` 获取宿主能力。
+- **新增 Prompt**：将正文放入 `resources/prompts/`，在 `index.json` 登记 ID 和版本，通过 `PromptCatalog` 获取。
+- **新增业务条件**：实现 `QueryReadinessPolicy` 做确定性必填检查，实现 `TaskSpecificationResolver` 固定已知业务条件与来源。
+- **更换模型**：分别实现主循环 `ModelPort` 与预处理 `PreparationModelPort`，落实 `CallControl` 中的截止时间和取消。
+
+Catalog 在启动时校验资源并形成不可变快照，任务记录资源版本。当前是 classpath 加载，修改后需要重新构建、启动；尚无远程分发或热更新。工具 Schema、资源路径和载荷大小仍需通过框架校验。
+
+完整示例与校验规则见[工程目录与扩展规范](docs/工程目录与扩展规范.md)。
+
+### Hook 与 Transform
+
+`AgentHook` 面向生命周期观察与执行前拦截，13 个位置为：
+
+```text
+REQUEST_START  PRE_ROUTE
+PRE_MODEL      POST_MODEL
+PRE_TOOL       POST_TOOL
+PRE_SKILL      POST_SKILL
+PRE_DELIVER    POST_DELIVER
+ON_ERROR       ON_CANCEL       REQUEST_END
+```
+
+实现接口并注册 Bean，声明唯一名称、订阅点、顺序与模式。执行顺序为 `order` 升序，再按名称排序：
+
+- `OBSERVER`：观察事件，失败被记录并隔离。
+- `GATE`：仅可订阅允许拦截的执行前阶段；拒绝或异常终止相应操作。
+
+需要改写载荷时实现 `TransformHook<T>`，不要通过生命周期事件修改运行状态。7 个类型化位置为：
+
+| 位置 | 输入 / 输出 |
+| --- | --- |
+| `INPUT` | 用户输入字符串 |
+| `CONTEXT` | `ModelContext` |
+| `MODEL_RESULT` | `Decision` |
+| `TOOL_CALL` | `ToolCall` |
+| `TOOL_RESULT` | `ToolResult` |
+| `ANSWER` | `Answer` |
+| `CLARIFICATION` | 澄清字符串 |
+
+同一位置按序串联输出，框架随后验证可信范围、固定任务条件、引用与大小等不变量。变换失败不能绕过校验交付原始结果。插件应线程安全，避免阻塞；Java 扩展是可信代码，不提供隔离沙箱。
+
+详见 [Trace 与 Hook](docs/Harness-Trace与Hook设计.md)和[Hook 变换链](docs/Hook变换链设计.md)。
+
+## 业务接入与数据口径
+
+`business` profile 通过 HTTP 访问业务桥接。业务端验证 JWT、Redis 当前登录和用户状态；首版仅允许本人未删除视频。工具查询会重新验证登录，并在同一 SQL 语句中限制视频归属和统计范围。
+
+当前指标 `bullet_count` 的口径版本为 `bullet-retained-created-v1`：按北京时间自然日，统计当前已入库且仍保留的弹幕记录，只接受最近 30 天内已结束日期。结果不代表历史发送总数或 MQ 消费完整性。
+
+业务端独立桥接入口、只读连接池、索引和 SQL 对账步骤见 [P0 业务接入](docs/P0业务接入.md)。生产凭证只由运行环境提供，原始登录 Token 不写入 Agent 数据库。
+
+## 存储、Trace 与恢复
+
+- **MySQL**：权威保存会话、任务、消息、证据、事件、审计与产物元数据。终态及关联交付记录在同一事务提交。
+- **Redis**：有界历史视图缓存，包含授权指纹和版本；故障回源 MySQL。存储 Outbox 异步刷新缓存。
+- **对象存储**：当前为私有文件适配器，读取校验归属、长度和 SHA-256；`ObjectStore` 可替换，尚未提供 S3 / MinIO SDK 适配。
+- **Trace**：OpenTelemetry → 有界本地文件 Outbox → JSONL / Kafka。后台等待目的地确认，失败重试；重复依靠 `eventId` 去重，容量和磁盘故障可能造成丢失。
+
+MySQL 存储 Outbox 与本地 Trace Outbox 职责独立。Trace 当前没有附带消费查询平台；审计落库不依赖 Kafka。
+
+持久化仅允许单写实例。重启可读取已完成任务和保留期内事件，排队任务受原期限约束恢复；在执行任务终止为 `RUNNER_LOST`。尚无执行检查点和多实例任务调度。
+
+运行配置、保留策略、会话删除及恢复语义见[持久化存储接入](docs/持久化存储接入.md)。不同模式的启动命令见[部署说明](../docs/DEPLOYMENT.md)。
+
+## 测试与验证
+
+模块验证与打包：
+
+```sh
+mvn -B -f tianmu-agent/pom.xml verify
+```
+
+仓库级检查和 HTTP / SSE 冒烟：
+
+```sh
+python scripts/test_publication.py
+python scripts/check_publication.py
+python scripts/smoke_demo.py --jar tianmu-agent/target/operations-agent-0.7.0-SNAPSHOT.jar
+git diff --check
+```
+
+以上命令从仓库根目录执行。普通测试无需模型 Key；MySQL / Redis 集成测试需在隔离环境显式启用 `AGENT_STORAGE_IT=true` 并配置连接。不能将测试指向正式业务库。CI 配置见 [ci.yml](../.github/workflows/ci.yml)。
+
+新增扩展应验证实际边界，例如参数非法、权限收缩、截止时间、晚到结果、变换越权和失败交付。真实模型调用需单独执行，不属于默认 CI。
+
+## 文档导航
+
+| 内容 | 文档 |
+| --- | --- |
+| API 字段、状态、事件与错误码 | [接口契约](docs/接口契约.md) |
+| 并行准备、降级与任务固定 | [统一入口与并行预处理](docs/统一入口与并行预处理.md) |
+| 资源目录与能力扩展 | [工程目录与扩展规范](docs/工程目录与扩展规范.md) |
+| 生命周期治理与变换 | [Trace / Hook](docs/Harness-Trace与Hook设计.md) · [Transform](docs/Hook变换链设计.md) |
+| 数据持久化与恢复 | [持久化存储接入](docs/持久化存储接入.md) |
+| 业务桥接与 SQL 对账 | [P0 业务接入](docs/P0业务接入.md) · [验收记录](docs/P0业务接入验收.md) |
+| 部署、贡献与演进 | [部署](../docs/DEPLOYMENT.md) · [贡献](../CONTRIBUTING.md) · [路线图](../docs/ROADMAP.md) |
+
+部分设计文档描述目标架构；尚未实现的能力以[项目首页的能力边界](../README.md#当前能力与边界)和当前代码为准。
