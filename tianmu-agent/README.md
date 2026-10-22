@@ -8,11 +8,12 @@ Java 17 / Spring Boot 3.5.4。面向同学协作的独立后端工程，使用�
 ## 先看什么
 
 - [持久化存储接入](docs/持久化存储接入.md)：v0.7 的实际配置、启动、会话/续接、幂等、对象与恢复边界。
+- [全流程模拟验收](docs/全流程模拟验收.md)：可重复运行的 HTTP 模型模拟器、真实存储和故障分支验证。
 
 - [工程目录与扩展规范](docs/工程目录与扩展规范.md)：v0.6 的资源目录、受限 ToolContext 与扩展步骤。
 - [统一入口与并行预处理](docs/统一入口与并行预处理.md)：v0.6 的串并行顺序、PreparedTask、超时、取消和交付边界。
 - [DeepSeek 模型接入](docs/DeepSeek模型接入.md)：共用 Key，Flash 跑预处理，V4 Pro 跑 Harness；环境变量和启用方式。
-- [项目进度](docs/项目进度.md)：截至 2026-10-21 的已验证能力、开发中改动、交付包差异和下一阶段分工。
+- [项目进度](docs/项目进度.md)：截至 2026-10-22 的已验证能力、实际边界和下一阶段分工。
 - [上下文与记忆管理设计](docs/上下文与记忆管理设计.md)：新参考材料的吸收与修正，尚未实现。
 - [架构与分工方案](docs/架构与分工方案.md)：可以直接发给同学，说明目标、范围、负责人和验收标准。
 - [接口契约](docs/接口契约.md)：公共类型、HTTP、SSE、工具、证据及错误码。
@@ -37,8 +38,8 @@ Windows PowerShell，在工程根目录执行：
 脚本优先寻找 JAVA_HOME 与用户 `.jdks` 下的 JDK 17，只改变当前进程的环境变量。
 其他系统在正确配置 JAVA_HOME 后执行 `mvn test`、`mvn spring-boot:run`。
 
-另附的 `Tianmu-agent-demo.jar` 可用 JDK 17 执行 `java -jar Tianmu-agent-demo.jar`，无需 Maven；
-同样使用模拟数据和默认本地地址。开发和提交代码请使用源码工程。
+执行 `mvn -B package` 后，可用 JDK 17 运行 `java -jar target/operations-agent-0.7.0-SNAPSHOT.jar`。
+默认使用模拟数据和本地地址。开发和提交代码请使用本模块源码。
 
 ## 跑一个完整请求
 
@@ -78,7 +79,7 @@ Invoke-RestMethod -Method Post -Headers $headers -Uri "http://127.0.0.1:8201/api
 ## 源码入口
 
 ```text
-com.Tianmu.agent
+com.tianmu.agent
 ├── adapters/storage MySQL 工作单元 / Redis 视图 / 私有对象
 ├── api        HTTP / SSE / 错误响应
 ├── access     IdentityPort：可信身份边界

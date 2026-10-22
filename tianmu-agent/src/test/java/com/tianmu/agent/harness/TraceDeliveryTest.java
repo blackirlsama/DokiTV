@@ -122,7 +122,8 @@ class TraceDeliveryTest {
             producer.completeNext();
             await(() -> producer.history().size() >= 2);
             producer.completeNext();
-            await(() -> spool.pendingCount() == 0);
+            // Acknowledgement removes the spool entry just before the delivery counter advances.
+            await(() -> spool.pendingCount() == 0 && stats.delivered.sum() == 1);
             assertEquals(1, stats.delivered.sum());
         } finally { exporter.shutdown().join(10, TimeUnit.SECONDS); }
     }

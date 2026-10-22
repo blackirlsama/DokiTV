@@ -107,7 +107,9 @@ class LoopControlTest {
         var policy = new LoopPolicy(6, Duration.ofMillis(300), Duration.ofSeconds(3), Duration.ofSeconds(1), Duration.ofMillis(100), 3, true);
         ExecutorService worker = Executors.newSingleThreadExecutor();
         try (Fixture f = new Fixture(policy)) {
-            RunState run = f.run(); AtomicInteger terminal = new AtomicInteger(); run.onTerminal(s -> terminal.incrementAndGet());
+            RunState run = f.run(); AtomicInteger terminal = new AtomicInteger();
+            CountDownLatch observed = new CountDownLatch(1);
+            run.onTerminal(s -> { terminal.incrementAndGet(); observed.countDown(); });
             Future<?> task = worker.submit(() -> f.execute(run, c -> {
                 entered.countDown();
                 while (release.getCount() > 0) {
@@ -116,7 +118,10 @@ class LoopControlTest {
                 return Decision.clarify("late");
             }));
             assertTrue(entered.await(1, TimeUnit.SECONDS)); task.get(2, TimeUnit.SECONDS);
-            assertEquals("DEADLINE_EXCEEDED", run.snapshot().errorCode()); assertEquals(1, terminal.get());
+            assertEquals("DEADLINE_EXCEEDED", run.snapshot().errorCode());
+            // The watchdog publishes cancellation before invoking observers outside the state lock.
+            // Worker completion alone does not mean the watchdog has finished those callbacks.
+            assertTrue(observed.await(1, TimeUnit.SECONDS)); assertEquals(1, terminal.get());
             assertNull(run.snapshot().clarification());
         } finally { release.countDown(); worker.shutdownNow(); }
     }
