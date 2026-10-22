@@ -39,14 +39,14 @@ public class DemoAdapters {
             }
         };
     }
-    @Bean IdentityPort demoIdentity() {
+    @Bean @Profile("!business") IdentityPort demoIdentity() {
         return credential -> switch (credential == null ? "" : credential) {
             case "demo-alice" -> new AccessScope("demo", "alice", Set.of(1001L));
             case "demo-bob" -> new AccessScope("demo", "bob", Set.of(1002L));
             default -> throw new AgentException("UNAUTHORIZED", "Use Bearer demo-alice or demo-bob in local demo mode");
         };
     }
-    @Bean BusinessQueryPort demoQuery() {
+    @Bean @Profile("!business") BusinessQueryPort demoQuery() {
         return (query, scope) -> {
             if (!scope.tenantId().equals("demo") || !scope.videoIds().contains(query.videoId()))
                 throw new AgentException("FORBIDDEN", "Video is outside your data scope");

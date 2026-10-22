@@ -46,11 +46,11 @@
 ```yaml
 canal:
   server:
-    host: 120.53.45.251
+    host: 127.0.0.1
     port: 11111
   destination: example
   username: canal
-  password: canal
+  password: ${CONFIGURE_LOCALLY}
   filter: ".*\\..*"
   client:
     heartbeat:

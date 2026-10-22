@@ -362,6 +362,22 @@ public final class MysqlRunRepository implements RunRepository, AutoCloseable {
             return result.stream().sorted(Comparator.comparingLong(MemoryTypes.Message::sequence)).toList();
         });
     }
+    @Override public Set<Long> resourcesForRun(UUID id, AccessScope owner) {
+        return read(() -> {
+            var saved = row(id, owner, false, false);
+            session(UUID.fromString(saved.get("session_id").toString()), owner, false);
+            return decode(saved.get("access_scope_json"), AccessScope.class).videoIds();
+        });
+    }
+    @Override public Set<Long> resourcesForSession(UUID id, AccessScope owner, long before) {
+        return read(() -> {
+            session(id, owner, false);
+            var rows = db.queryForList("SELECT r.access_scope_json FROM agent_message m JOIN agent_run r ON r.tenant_id=m.tenant_id AND r.run_id=m.run_id WHERE m.tenant_id=? AND m.owner_user_id=? AND m.session_id=? AND m.message_seq<? AND r.data_expires_at>UTC_TIMESTAMP(6) ORDER BY m.message_seq DESC LIMIT 50", owner.tenantId(), owner.userId(), id.toString(), before);
+            Set<Long> result = new HashSet<>();
+            for (var value : rows) result.addAll(decode(value.get("access_scope_json"), AccessScope.class).videoIds());
+            return Set.copyOf(result);
+        });
+    }
     public List<Map<String, Object>> artifacts(UUID runId, AccessScope owner) {
         return read(() -> { load(runId, owner); return db.queryForList("SELECT artifact_id AS artifactId,media_type AS mediaType,size_bytes AS sizeBytes,content_sha256 AS sha256 FROM agent_artifact WHERE tenant_id=? AND owner_user_id=? AND run_id=? AND status='READY' AND expires_at>UTC_TIMESTAMP(6)", owner.tenantId(), owner.userId(), runId.toString()); });
     }

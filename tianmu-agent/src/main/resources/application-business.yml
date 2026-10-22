@@ -1,0 +1,4 @@
+agent:
+  business:
+    base-url: ${BUSINESS_BASE_URL:http://127.0.0.1:8202}
+    timeout-millis: 3000

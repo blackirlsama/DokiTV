@@ -10,8 +10,9 @@ public final class AgentTypes {
     private AgentTypes() {}
     public enum Status { QUEUED, RUNNING, SUCCEEDED, NEEDS_INPUT, FAILED, CANCELLED }
     public enum Kind { TOOL, ANSWER, CLARIFY }
-    public record AccessScope(String tenantId, String userId, Set<Long> videoIds) {
-        public AccessScope { videoIds = Set.copyOf(videoIds); }
+    public record AccessScope(String tenantId, String userId, Set<Long> videoIds, String authorizationRef) {
+        public AccessScope(String tenantId, String userId, Set<Long> videoIds) { this(tenantId, userId, videoIds, ""); }
+        public AccessScope { videoIds = Set.copyOf(videoIds); authorizationRef = authorizationRef == null ? "" : authorizationRef; }
     }
     public record ToolCall(String name, Map<String, Object> arguments) {
         public ToolCall { arguments = ImmutablePayload.map(arguments); }

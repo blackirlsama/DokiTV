@@ -1,0 +1,33 @@
+server:
+  address: 127.0.0.1
+  port: ${BUSINESS_BRIDGE_PORT:8202}
+spring:
+  application:
+    name: tianmu-agent-business-bridge
+  datasource:
+    url: ${BUSINESS_JDBC_URL}
+    username: ${BUSINESS_DB_USER}
+    password: ${BUSINESS_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 4
+      connection-timeout: 3000
+      connection-init-sql: "SET time_zone = '+00:00'"
+      read-only: true
+      data-source-properties:
+        connectTimeout: 3000
+        socketTimeout: 3000
+  data:
+    redis:
+      database: ${BUSINESS_REDIS_DATABASE:0}
+      host: ${BUSINESS_REDIS_HOST:127.0.0.1}
+      port: ${BUSINESS_REDIS_PORT:6379}
+      password: ${BUSINESS_REDIS_PASSWORD:}
+      connect-timeout: 500ms
+      timeout: 500ms
+agent:
+  bridge:
+    enabled: true
+    tenant-id: ${BUSINESS_TENANT_ID:tianmu}
+    active-user-states: ${BUSINESS_ACTIVE_USER_STATES}
+    datetime-storage-zone: ${BUSINESS_DATETIME_ZONE:Asia/Shanghai}
+    query-timeout-seconds: 2

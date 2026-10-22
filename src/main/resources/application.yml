@@ -1,84 +1,75 @@
+# Credentials belong in the process environment; see .env.example and docs/DEPLOYMENT.md.
 spring:
   application:
     name: tianmu
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://120.53.45.251:13306/tianmu?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
-    username: root
-    password: gK3T9n%q2M@j7Z9
-
+    url: ${TIANMU_JDBC_URL:jdbc:mysql://127.0.0.1:3306/tianmu?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+    username: ${TIANMU_DB_USER:tianmu}
+    password: ${TIANMU_DB_PASSWORD}
   elasticsearch:
-    uris: http://120.53.45.251:9200  # 你的ES地址
-    username: elastic      # 如果有认证
-    password: tianmu
+    uris: ${TIANMU_ES_URL:http://127.0.0.1:9200}
+    username: ${TIANMU_ES_USER:}
+    password: ${TIANMU_ES_PASSWORD:}
     connection-timeout: 5s
     socket-timeout: 30s
-
-
   data:
     redis:
-      database: 15
-      host: 120.53.45.251
-      port: 6379
-      timeout: 50000
-      password: "e65K4t8w2"
-      # Redis 服务器密码（当前未启用）
-      # 配置 redis 连接池
+      database: ${TIANMU_REDIS_DATABASE:0}
+      host: ${TIANMU_REDIS_HOST:127.0.0.1}
+      port: ${TIANMU_REDIS_PORT:6379}
+      timeout: 5000ms
+      password: ${TIANMU_REDIS_PASSWORD:}
       lettuce:
         pool:
-          # 链接池中最小的空闲链接 默认为 0
           min-idle: 4
-          # 链接池中最大的空闲连接 默认为 8
           max-idle: 8
-          #连接池中最大数据库链接数 默认为 8
           max-active: 8
-          #连接池最大阻塞等待时间
           max-wait: 5000ms
-
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     db-config:
-      logic-delete-field: isDelete # 全局逻辑删除的实体字段名
-      logic-delete-value: 1 # 逻辑已删除值（默认为 1）
-      logic-not-delete-value: 0 # 逻辑未删除值（默认为 0）
-
+      logic-delete-field: isDelete
+      logic-delete-value: 1
+      logic-not-delete-value: 0
 minio:
-  url: http://120.53.45.251:9000
-  access-key: minioadmin
-  secret-key: minioadmin
-  bucket-name: tianmu-upload
-
-
+  url: ${TIANMU_MINIO_URL:http://127.0.0.1:9000}
+  access-key: ${TIANMU_MINIO_ACCESS_KEY}
+  secret-key: ${TIANMU_MINIO_SECRET_KEY}
+  bucket-name: ${TIANMU_MINIO_BUCKET:tianmu-upload}
 netty:
-  port: 9101
-
-
-
+  port: ${TIANMU_NETTY_PORT:9101}
 rocketmq:
-  name-server: 120.53.45.251:9876
+  name-server: ${TIANMU_ROCKETMQ_NAMESERVER:127.0.0.1:9876}
   producer:
-    group: tianmuorange-producer-group
+    group: tianmu-producer-group
   consumer:
-    group: tianmuorange-consumer-group
+    group: tianmu-consumer-group
 server:
-  port: 8101                          # Spring Boot 服务监听端口
+  address: ${TIANMU_SERVER_ADDRESS:127.0.0.1}
+  port: ${TIANMU_SERVER_PORT:8101}
   servlet:
     context-path: /api
-
 canal:
   server:
-    host: 120.53.45.251
-    port: 11111
-  destination: example
-  username: canal
-  password: canal
+    host: ${TIANMU_CANAL_HOST:127.0.0.1}
+    port: ${TIANMU_CANAL_PORT:11111}
+  destination: ${TIANMU_CANAL_DESTINATION:example}
+  username: ${TIANMU_CANAL_USER:canal}
+  password: ${TIANMU_CANAL_PASSWORD:}
   filter: ".*\\..*"
   client:
     heartbeat:
-      interval: 2000    # 心跳间隔(毫秒)
-      timeout: 3000    # 心跳超时(毫秒)
+      interval: 2000
+      timeout: 3000
     socket:
-      timeout: 6000    # socket超时(毫秒)
+      timeout: 6000
+agent:
+  bridge:
+    enabled: ${AGENT_BRIDGE_ENABLED:false}
+    tenant-id: ${BUSINESS_TENANT_ID:tianmu}
+    active-user-states: ${BUSINESS_ACTIVE_USER_STATES:}
+    datetime-storage-zone: ${BUSINESS_DATETIME_ZONE:Asia/Shanghai}
+    query-timeout-seconds: 2

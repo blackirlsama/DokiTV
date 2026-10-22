@@ -1,0 +1,22 @@
+name: 缺陷报告
+description: 提供可复现的问题；安全漏洞请参考 SECURITY.md
+title: "[Bug] "
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤、预期与实际结果
+      description: 不要上传凭据、原始 Token 或真实用户数据。
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 提交版本、Java 版本与系统
+    validations:
+      required: true
+  - type: textarea
+    id: profile
+    attributes:
+      label: 启动 profile 和脱敏日志
+      description: 说明使用 demo/business、模拟/真实模型、内存/持久化存储。

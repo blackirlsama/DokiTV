@@ -1,0 +1,106 @@
+{
+  "phase": "P0 business integration",
+  "verifiedAt": "2026-10-22",
+  "data": "isolated synthetic MySQL fixtures",
+  "unitAndIntegration": {
+    "agent": {
+      "tests": 114,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "businessBeforePublication": {
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "controlledFlow": {
+    "status": "PASS",
+    "authentication": "business-jwt-and-online-redis-session",
+    "businessService": "real-business-bridge",
+    "model": "local-http-simulator",
+    "expectedValue": 3,
+    "referenceValue": 3,
+    "externalModelCalls": 0,
+    "checks": [
+      {
+        "name": "real_jwt_authentication",
+        "status": "PASS"
+      },
+      {
+        "name": "business_faq_without_model",
+        "status": "PASS"
+      },
+      {
+        "name": "business_clarification",
+        "status": "PASS"
+      },
+      {
+        "name": "real_business_harness_query",
+        "status": "PASS",
+        "runId": "43591bcd-30be-4606-8f2b-5237461a4a24",
+        "steps": 3
+      },
+      {
+        "name": "independent_sql_reconciliation",
+        "status": "PASS",
+        "expected": 3,
+        "toolValue": 3,
+        "cumulativeCounterFixture": 999
+      },
+      {
+        "name": "business_evidence_artifact_history_sse",
+        "status": "PASS"
+      },
+      {
+        "name": "forged_user_and_foreign_video_rejected",
+        "status": "PASS"
+      },
+      {
+        "name": "ownership_change_revokes_saved_results_and_history",
+        "status": "PASS"
+      },
+      {
+        "name": "ownership_change_before_tool_call_is_rechecked",
+        "status": "PASS"
+      },
+      {
+        "name": "logout_revokes_running_tool_and_result_reads",
+        "status": "PASS"
+      },
+      {
+        "name": "business_result_survives_restart_with_fresh_authentication",
+        "status": "PASS"
+      },
+      {
+        "name": "new_business_query_after_restart",
+        "status": "PASS"
+      },
+      {
+        "name": "raw_tokens_absent_from_snapshots_logs_traces_and_objects",
+        "status": "PASS"
+      }
+    ]
+  },
+  "realModelFlow": {
+    "status": "PASS",
+    "authentication": "business-jwt-and-online-redis-session",
+    "models": [
+      "deepseek-flash",
+      "deepseek-v4-pro"
+    ],
+    "externalModelCalls": 6,
+    "providerRequestsThisVerification": 0,
+    "observedInputTokens": 4786,
+    "observedOutputTokens": 232
+  },
+  "limitations": [
+    "Not production accounts or production dataset",
+    "Password login HTTP not exercised; existing JWT format issued by test-only helper",
+    "No live RocketMQ retry/DLQ acceptance",
+    "No comprehensive model-quality or load evaluation"
+  ],
+  "secretsIncluded": false
+}

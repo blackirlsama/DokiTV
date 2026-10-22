@@ -2,7 +2,9 @@
 
 Java 17 / Spring Boot 3.5.4。面向同学协作的独立后端工程，使用分包式单体结构。
 
-**当前 v0.7 已接通 MySQL 持久化、Redis 会话视图与私有文件对象存储。默认离线 demo；启用 persistent 后重启可恢复正式记录。业务查询仍为模拟数据，尚未连接 Tianmu。**
+**当前为开发预览版：默认 Demo 免 Key；business profile 已提供真实 JWT/Redis 身份、视频授权和 SQL 查询适配器。隔离库与一个真实模型场景已验证，正式业务环境仍待验收。**
+
+最新入口：[根 README](../README.md) · [部署说明](../docs/DEPLOYMENT.md) · [P0 业务接入](docs/P0业务接入.md) · [P0 验收](docs/P0业务接入验收.md) · [贡献指南](../CONTRIBUTING.md)。
 默认只绑定 `127.0.0.1:8201`。演示身份是公开固定凭证，不能直接部署到公网。
 
 ## 先看什么

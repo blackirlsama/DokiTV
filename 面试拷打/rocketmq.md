@@ -48,7 +48,7 @@
 在 `application.yml` 文件中配置 RocketMQ 相关参数：
 ```yaml
 rocketmq:
-  name-server: 120.53.45.251:9876
+  name-server: 127.0.0.1:9876
   producer:
     group: tianmuorange-producer-group
   consumer:

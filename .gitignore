@@ -31,3 +31,24 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Private configuration and generated runtime data
+.env
+.env.*
+!.env.example
+application-local.yml
+application-local.yaml
+application-secrets.yml
+*.log
+*.jks
+*.keystore
+*.p12
+*.key
+*.pem
+__pycache__/
+*.py[cod]
+/var/
+/work/
+/outputs/
+**/*-env.json
+**/*fixture*.json

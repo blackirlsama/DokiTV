@@ -1,0 +1,11 @@
+Tianmu (formerly DokiTV)
+Source: https://github.com/blackirlsama/Tianmu
+
+The DokiTV URL redirects to this repository. Existing Git authorship and
+copyright notices are retained. The maintainer confirmed authority to license
+the repository under MIT on 2026-10-22.
+
+Third-party libraries, middleware, container images and services retain their
+own licenses and terms. MIT applies to the project-owned source and documents;
+it does not relicense dependencies, model services, trademarks or user data.
+See docs/THIRD_PARTY.md for the dependency inventory and attribution process.

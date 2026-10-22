@@ -44,6 +44,12 @@ public final class MemoryRunRepository implements RunRepository {
         runs.put(run.id, run); if (key != null) keys.put(identity, run.id);
         return new Created(run, true);
     }
+    @Override public synchronized Set<Long> resourcesForRun(UUID id, AccessScope caller) {
+        RunState run = runs.get(id);
+        if (run == null || !run.owner.tenantId().equals(caller.tenantId()) || !run.owner.userId().equals(caller.userId()))
+            throw new AgentException("RUN_NOT_FOUND", "Run not found");
+        return run.owner.videoIds();
+    }
     public synchronized RunState load(UUID id, AccessScope caller) {
         RunState run = runs.get(id);
         if (run == null || !run.owner.tenantId().equals(caller.tenantId()) || !run.owner.userId().equals(caller.userId()))

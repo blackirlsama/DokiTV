@@ -1,0 +1,53 @@
+{
+  "date": "2026-10-22",
+  "stage": "local-public-preview-preparation",
+  "license": "MIT",
+  "licenseAuthorityConfirmed": true,
+  "remoteWasAlreadyPublic": true,
+  "javaTests": {
+    "agent": {
+      "tests": 114,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "business": {
+      "tests": 14,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "publicationScannerTests": 4,
+  "demoSmoke": {
+    "status": "PASS",
+    "checks": [
+      "unauthenticated-request-rejected",
+      "faq-answer-and-sse",
+      "harness-answer-and-sse"
+    ],
+    "paidModelCalls": 0,
+    "middlewareRequired": false
+  },
+  "yamlParsing": {
+    "status": "PASS",
+    "files": 9
+  },
+  "worktreeSecretScan": "PASS",
+  "historySecretScan": {
+    "status": "REVIEW_REQUIRED",
+    "blobs": 787,
+    "findings": 65,
+    "valuesIncluded": false
+  },
+  "remoteCi": "not-triggered",
+  "pushed": false,
+  "releaseCreated": false,
+  "credentialRotation": "maintainer-action-required",
+  "limitations": [
+    "Heuristic credential scan is not a complete security/dependency audit",
+    "Historical credentials have not been revoked by this work",
+    "No full-platform fresh-database deployment or load test",
+    "Previous P0 real-model flow was not repeated after configuration cleanup"
+  ]
+}

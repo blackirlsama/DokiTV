@@ -57,9 +57,9 @@
 在 `application.yml` 文件中配置 MinIO 连接信息：
 ```yaml
 minio:
-  url: http://120.53.45.251:9000
-  access-key: minioadmin
-  secret-key: minioadmin
+  url: http://127.0.0.1:9000
+  access-key: ${CONFIGURE_LOCALLY}
+  secret-key: ${CONFIGURE_LOCALLY}
   bucket-name: tianmu-upload
 ```
 
@@ -117,7 +117,7 @@ public class MinioConfig {
 **项目中的部署和配置**：
 - **部署方式**：项目中使用单节点部署的 MinIO 服务，配置在 `application.yml` 中。
 - **存储桶管理**：创建名为 `tianmu-upload` 的存储桶，用于存储所有文件。
-- **访问控制**：使用 `minioadmin` 作为访问密钥和密钥，控制对 MinIO 的访问。
+- **访问控制**：使用 `${CONFIGURE_LOCALLY}` 作为访问密钥和密钥，控制对 MinIO 的访问。
 
 **MinIO 服务启动命令**：
 ```bash

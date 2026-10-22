@@ -13,10 +13,8 @@
     <version>0.0.1-SNAPSHOT</version>
     <name>tianmu</name>
     <description>tianmu</description>
-    <url/>
-    <licenses>
-        <license/>
-    </licenses>
+    <url>https://github.com/blackirlsama/Tianmu</url>
+    <licenses><license><name>MIT License</name><url>https://opensource.org/license/mit</url><distribution>repo</distribution></license></licenses>
     <developers>
         <developer/>
     </developers>
@@ -24,7 +22,7 @@
         <connection/>
         <developerConnection/>
         <tag/>
-        <url/>
+        <url>https://github.com/blackirlsama/Tianmu</url>
     </scm>
     <properties>
         <java.version>17</java.version>
@@ -161,6 +159,11 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration><mainClass>com.orangecode.tianmu.TianmuApplication</mainClass></configuration>
+                <executions><execution>
+                    <id>agent-business-bridge</id><goals><goal>repackage</goal></goals>
+                    <configuration><mainClass>com.orangecode.tianmu.agentbridge.AgentBridgeApplication</mainClass><classifier>agent-bridge</classifier></configuration>
+                </execution></executions>
             </plugin>
         </plugins>
     </build>

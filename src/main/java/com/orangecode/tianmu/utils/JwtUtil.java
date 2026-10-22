@@ -34,7 +34,11 @@ public final class JwtUtil {
                 .compact();
     }
     public static Key getSignInKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(JWTConstant.TOKEN_SECRET_KEY);
+        String secret = System.getProperty("tianmu.jwt.secret-base64");
+        if (secret == null || secret.isBlank()) secret = System.getenv("JWT_SECRET_BASE64");
+        if (secret == null || secret.isBlank())
+            throw new IllegalStateException("Set JWT_SECRET_BASE64 to a private Base64-encoded key of at least 32 random bytes");
+        byte[] keyBytes = Decoders.BASE64.decode(secret);
         return Keys.hmacShaKeyFor(keyBytes);
     }
     /**

@@ -14,4 +14,7 @@ public interface RunRepository {
     default List<RunState> recoverQueued() { return List.of(); }
     default void refresh(RunState run) {}
     default boolean durable() { return false; }
+    /** Owner-only metadata used to authorize requested resources before loading their contents. */
+    default Set<Long> resourcesForRun(UUID id, AccessScope caller) { return load(id, caller).owner.videoIds(); }
+    default Set<Long> resourcesForSession(UUID id, AccessScope caller, long before) { return Set.of(); }
 }

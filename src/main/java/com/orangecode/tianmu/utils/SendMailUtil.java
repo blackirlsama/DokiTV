@@ -12,6 +12,8 @@ import java.util.concurrent.Executors;
 public class SendMailUtil {
     private static final ExecutorService executor = Executors.newFixedThreadPool(5);
     public static void sendEmailCode(String targetEmail, String authCode) {
+        if (SMSConstant.EMAIL_USER_NAME.isBlank() || SMSConstant.EMAIL_PASSWORD.isBlank())
+            throw new IllegalStateException("Configure TIANMU_SMTP_USER and TIANMU_SMTP_PASSWORD before sending mail");
         executor.submit(() -> {
             try {
                 // 设置TLS协议
@@ -20,9 +22,7 @@ public class SendMailUtil {
                 SimpleEmail mail = new SimpleEmail();
                 // 设置发送邮件的服务器
                 mail.setHostName(SMSConstant.EMAIL_HOST_NAME);
-                // "你的邮箱号"+ "上文开启SMTP获得的授权码"
                 mail.setAuthentication(SMSConstant.EMAIL_USER_NAME, SMSConstant.EMAIL_PASSWORD);
-                // 发送邮件 "你的邮箱号"+"发送时用的昵称"
                 mail.setFrom(SMSConstant.EMAIL_USER_NAME, SMSConstant.EMAIL_NAME);
                 // 使用安全链接
                 mail.setSSLOnConnect(true);

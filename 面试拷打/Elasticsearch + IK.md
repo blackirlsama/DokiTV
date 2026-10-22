@@ -71,9 +71,9 @@
 spring:
   elasticsearch:
     rest:
-      uris: http://120.53.45.251:9200
+      uris: http://127.0.0.1:9200
       username: elastic
-      password: changeme
+      password: ${CONFIGURE_LOCALLY}
 ```
 
 **核心配置参数**：
@@ -90,7 +90,7 @@ public class ElasticsearchConfig {
     public RestHighLevelClient restHighLevelClient() {
         return RestClients.create(
                 RestClientBuilder.builder(
-                        new HttpHost("120.53.45.251", 9200, "http")
+                        new HttpHost("127.0.0.1", 9200, "http")
                 ).setHttpClientConfigCallback(httpClientBuilder -> {
                     httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider());
                     return httpClientBuilder;
@@ -461,9 +461,9 @@ public List<VideoEs> searchVideos(String keyword, Integer page, Integer size) {
 spring:
   elasticsearch:
     rest:
-      uris: https://120.53.45.251:9200
+      uris: https://127.0.0.1:9200
       username: elastic
-      password: changeme
+      password: ${CONFIGURE_LOCALLY}
 ```
 
 ### 19. 项目中如何处理 Elasticsearch 与应用服务器的网络连接？如何优化网络传输？

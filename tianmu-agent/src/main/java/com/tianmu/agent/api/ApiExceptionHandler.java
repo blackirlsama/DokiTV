@@ -13,12 +13,12 @@ public class ApiExceptionHandler {
     @ExceptionHandler(AgentException.class)
     public ResponseEntity<Map<String, String>> domain(AgentException e) {
         HttpStatus status = switch (e.code()) {
-            case "UNAUTHORIZED" -> HttpStatus.UNAUTHORIZED;
+            case "UNAUTHORIZED", "AUTH_CONTEXT_EXPIRED" -> HttpStatus.UNAUTHORIZED;
             case "FORBIDDEN" -> HttpStatus.FORBIDDEN;
             case "RUN_NOT_FOUND", "RESULT_NOT_FOUND", "SESSION_NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "IDEMPOTENCY_CONFLICT", "CLARIFICATION_CONFLICT", "STORAGE_FENCED" -> HttpStatus.CONFLICT;
             case "EVENTS_EXPIRED" -> HttpStatus.GONE;
-            case "STORAGE_UNAVAILABLE", "OBJECT_STORE_UNAVAILABLE", "ARTIFACT_UNAVAILABLE" -> HttpStatus.SERVICE_UNAVAILABLE;
+            case "STORAGE_UNAVAILABLE", "OBJECT_STORE_UNAVAILABLE", "ARTIFACT_UNAVAILABLE", "BUSINESS_UNAVAILABLE", "BUSINESS_TIMEOUT" -> HttpStatus.SERVICE_UNAVAILABLE;
             case "CAPACITY_EXCEEDED" -> HttpStatus.TOO_MANY_REQUESTS;
             default -> HttpStatus.BAD_REQUEST;
         };

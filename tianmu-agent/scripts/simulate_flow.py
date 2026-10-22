@@ -97,7 +97,8 @@ class SimulatedModel:
             result = results[-1]
             value = result["data"]["value"]
             conditions = data["taskSpecification"]["conditions"]
-            text = (f"【模拟数据】视频 {conditions['video_id']} 在 {conditions['date']} "
+            label = "【模拟数据】" if result["data"].get("demo", True) else "【已入库统计】"
+            text = (f"{label}视频 {conditions['video_id']} 在 {conditions['date']} "
                     f"的弹幕数为 {value} 条；本次结果仅用于验证流程。")
             return 200, {"kind": "ANSWER", "answer": {
                 "text": text, "evidenceIds": [result["evidenceId"]]}}
@@ -263,7 +264,7 @@ class FlowSimulation:
         self.logs.append(log)
         command = [self.args.java, "-Dfile.encoding=UTF-8", "-Djava.io.tmpdir=" + str(self.output / "java-temp"),
                    "-jar", str(Path(self.args.jar).resolve()),
-                   "--spring.profiles.active=demo,deepseek,persistent", f"--server.port={self.port}",
+                   "--spring.profiles.active=" + getattr(self.args, "profiles", "demo,deepseek,persistent"), f"--server.port={self.port}",
                    "--harness.trace.sink=file", "--harness.trace.directory=" + str(trace),
                    "--agent.preparation.parallel-timeout=2s", "--agent.preparation.rewrite-timeout=1500ms",
                    "--agent.preparation.emotion-timeout=1s", "--harness.loop.model-timeout=2s",

@@ -40,10 +40,10 @@ spring:
   data:
     redis:
       database: 15
-      host: 120.53.45.251
+      host: 127.0.0.1
       port: 6379
       timeout: 50000
-      password: "e65K4t8w2"
+      password: ${CONFIGURE_LOCALLY}
       lettuce:
         pool:
           min-idle: 4
@@ -396,7 +396,7 @@ sentinel parallel-syncs mymaster 1
   spring:
     data:
       redis:
-        password: "e65K4t8w2"
+        password: ${CONFIGURE_LOCALLY}
   ```
 - 服务器端可能配置了防火墙，限制 Redis 端口的访问。
 

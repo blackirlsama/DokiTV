@@ -16,6 +16,8 @@ public class SendBulletRequest implements Serializable {
      */
 
     private Long bulletId;
+    /** Server reception time; overwritten at the WebSocket ingress before publishing. */
+    private java.util.Date createTime;
 
     /**
      * 视频 ID

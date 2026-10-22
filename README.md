@@ -1,168 +1,127 @@
 # Tianmu 天幕
 
-> 高并发视频弹幕后端 × 可观测运营 Agent —— 让运营用自然语言查数据，答案自带口径与证据。
+视频弹幕后端与可观测运营 Agent。用自然语言查询有权限的视频指标，答案附带证据和统计口径。
 
 ![Java](https://img.shields.io/badge/Java-17-blue)
-![Spring Boot](https://img.shields.io/badge/Spring%20Boot-2.6%20%2B%203.5-brightgreen)
-![DeepSeek](https://img.shields.io/badge/LLM-DeepSeek-orange)
-![License](https://img.shields.io/badge/license-MIT-green)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5.4-green)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## 为什么做这个项目
+**当前为开发预览版。** 默认 Demo 无需模型 Key、数据库或其他中间件；真实业务模式提供 JWT/Redis 登录校验、视频归属授权及只读 SQL 查询。隔离数据库联调和一个真实模型场景已通过，正式账号、现有业务库和生产吞吐仍待验收。
 
-视频平台后端面试常问：**弹幕怎么抗高并发？缓存一致性怎么保证？文件上传怎么优化？**
+## 先跑 Demo
 
-Tianmu 不是 demo，是把这些问题做成可运行、可验证、可观测的系统：
+需要 JDK 17、Maven 3.6.3+；首次构建需要网络下载依赖。Windows、Linux 和 macOS 均可使用 Maven 命令：
 
-- 视频平台：Netty 长连接 + RocketMQ 削峰 + Canal 同步 + ES 搜索，覆盖弹幕全生命周期
-- 运营 Agent：不是"接个 LLM 就叫 AI"，而是带**权限边界、Hook 拦截、全链路 Trace、证据引用**的生产级 Agent 基架
-
-## 架构
-
-```mermaid
-flowchart TB
-    subgraph 视频平台["天幕视频平台 (Spring Boot 2.6)"]
-        Client[客户端] -->|Netty WebSocket| Gateway[接入层]
-        Gateway --> MQ[RocketMQ 削峰]
-        MQ --> Push[实时推送]
-        MQ --> Persist[持久化 MySQL]
-        Persist --> Canal[Canal Binlog]
-        Canal --> Redis[(Redis ZSet)]
-        Persist --> ES[(ElasticSearch + IK)]
-        Upload[MinIO 分片上传] --> Persist
-    end
-
-    subgraph Agent["天幕运营 Agent (Spring Boot 3.5)"]
-        User[运营人员] -->|HTTP/SSE| API[接入层]
-        API --> Preprocess[并行预处理<br/>改写/情绪/澄清]
-        Preprocess -->|命中 FAQ| Direct[直答]
-        Preprocess -->|未命中| Runtime[Agent Runtime]
-        Runtime -->|Hook 拦截| Gate[权限/预算/参数校验]
-        Gate --> Loop[决策循环]
-        Loop --> Model[DeepSeek 模型]
-        Loop --> Tool[工具调用]
-        Tool -->|只读| Query[业务查询接口]
-        Query -->|SQL/ES| Persist
-        Loop --> Trace[OTel Trace]
-        Trace --> Kafka[Kafka/JSONL]
-    end
-
-    style 视频平台 fill:#1a1a2e,color:#fff
-    style Agent fill:#16213e,color:#fff
-```
-
-## 核心亮点
-
-### 视频平台
-
-| 场景 | 方案 | 关键决策 |
-|---|---|---|
-| 弹幕高并发 | Netty WebSocket + RocketMQ 异步削峰 | 只保证下发时序，不保证全局到达 |
-| 弹幕时序 | Redis ZSet 时间戳排序 | 比数据库轮询低 2 个数量级延迟 |
-| 缓存一致性 | Canal 监听 Binlog → 双写 Redis | 最终一致，容忍秒级延迟 |
-| 大文件上传 | MinIO 秒传 + 分片 + 断点续传 | 5GB 视频上传成功率 >99% |
-| 智能搜索 | ES + IK 分词 + 全量同步 Job | 视频/用户双索引 |
-| 长连接 | Netty 单机支撑 | 设计目标千万级，实测 10w+ |
-| 缓存穿透 | 布隆过滤器拦截非法 ID | 拦截率 99.9% |
-| 操作限流 | Redis Lua 脚本 | 点赞/收藏防刷 |
-
-### 运营 Agent
-
-| 能力 | 实现 | 为什么这样设计 |
-|---|---|---|
-| 决策循环 | 单 Agent + 工具调用，步数/时长/重复调用三道护栏 | 防止 LLM 死循环，控制成本 |
-| 并行预处理 | 改写/情绪/澄清三路并行 | 降低首 Token 延迟 |
-| FAQ 直答 | 命中直接返回，不进 Loop | 80% 高频问题零 LLM 成本 |
-| Hook 体系 | Observer/Gate/Transform 三类，11 时点 + 7 变换链 | 插件化扩展，不改主循环 |
-| 全链路 Trace | OTel + Outbox 持久化缓冲 | 故障不阻塞业务，可回放审计 |
-| 证据引用 | 每条结论带 `ref_id`，可回溯到原始数据 | 可验证，防幻觉 |
-| 配置化 | Tool/Skill/Prompt 外置 `resources/` | 修改不重启，热更新 |
-
-## 快速开始
-
-```powershell
-# 1. 视频平台
+```sh
 git clone https://github.com/blackirlsama/Tianmu.git
 cd Tianmu
-mvn spring-boot:run
-
-# 2. 运营 Agent(另开终端)
-cd tianmu-agent
-.\scripts\dev.ps1 -Action run
-
-# 3. 发起查询
-curl -N -H "Authorization: Bearer demo-alice" \
-  -H "Content-Type: application/json" \
-  -d '{"message":"查询视频1001昨天的弹幕数"}' \
-  http://127.0.0.1:8201/api/agent/runs
+mvn -B -f tianmu-agent/pom.xml package
+java -jar tianmu-agent/target/operations-agent-0.7.0-SNAPSHOT.jar
 ```
 
-<details>
-<summary>DeepSeek 真实模型接入</summary>
+默认绑定 `127.0.0.1:8201`，使用演示身份、模拟模型和内存存储，不发起收费模型请求。另开终端发起查询：
 
-```yaml
-# tianmu-agent/src/main/resources/application-deepseek.yml
-agent:
-  model:
-    provider: deepseek
-    api-key: ${DEEPSEEK_API_KEY}
-    flash-model: deepseek-flash    # 预处理
-    pro-model: deepseek-v4-pro     # Harness 决策
+```sh
+# Bash / zsh
+curl -s -X POST http://127.0.0.1:8201/api/agent/runs \
+  -H 'Authorization: Bearer demo-alice' \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"查询视频1001昨天的弹幕数"}'
 ```
+
+Windows PowerShell：
 
 ```powershell
-$env:DEEPSEEK_API_KEY="sk-..."
-.\scripts\dev.ps1 -Action run -Profile deepseek
-```
-</details>
-
-## 目录结构
-
-```
-Tianmu/
-├── src/main/java/com/tianmu/          # 视频平台
-│   ├── controller/                     # REST API
-│   ├── service/                        # 业务逻辑
-│   ├── websocket/                      # Netty 长连接
-│   ├── consumer/                       # RocketMQ 消费
-│   └── ...
-├── tianmu-agent/                       # 运营 Agent
-│   ├── src/main/java/com/tianmu/agent/
-│   │   ├── api/                        # HTTP/SSE 接口
-│   │   ├── runtime/                    # Agent Runtime 决策循环
-│   │   ├── harness/                    # Hook + Trace + Transform
-│   │   ├── model/                      # DeepSeek 适配
-│   │   ├── preparation/                # 并行预处理
-│   │   ├── adapters/storage/           # MySQL/Redis/文件存储
-│   │   └── ...
-│   ├── src/main/resources/
-│   │   ├── prompts/                    # Prompt 外置
-│   │   ├── skills/                     # Skill 配置
-│   │   └── tools/                      # Tool Schema
-│   └── docs/                           # 架构/接口/验证文档
-└── 面试拷打/                            # 面试准备材料
+$headers = @{ Authorization = 'Bearer demo-alice' }
+$body = @{ message = '查询视频1001昨天的弹幕数' } | ConvertTo-Json
+$run = Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8201/api/agent/runs' -Headers $headers -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
+$run.runId
 ```
 
-## 文档
+创建返回 HTTP 202 和 `runId`，不会直接返回 SSE。用这个 ID 读取结果或事件：
 
-| 文档 | 说明 |
+```sh
+curl -s -H 'Authorization: Bearer demo-alice' http://127.0.0.1:8201/api/agent/runs/REPLACE_WITH_RUN_ID
+curl -N -H 'Authorization: Bearer demo-alice' http://127.0.0.1:8201/api/agent/runs/REPLACE_WITH_RUN_ID/events
+```
+
+演示查询最终返回 **128 条模拟数据**；Alice 只允许访问视频 1001。也可以在未启动服务时运行自动冒烟，它会自行启动并关闭 Java 进程：
+
+```sh
+python scripts/smoke_demo.py --jar tianmu-agent/target/operations-agent-0.7.0-SNAPSHOT.jar
+```
+
+不要把 Demo 身份用于公网服务。
+
+## 请求链路
+
+```mermaid
+flowchart TD
+    Client[HTTP / SSE 客户端] --> Identity[服务端身份与目标权限校验]
+    Identity --> FAQ[FAQ 匹配]
+    FAQ -->|命中| Delivery[答案交付与证据校验]
+    FAQ -->|未命中| Memory[加载会话记忆与规则校验]
+    Memory --> Parallel[小模型并行：澄清 / Query 改写 / 情绪识别]
+    Parallel -->|需补充条件| Clarify[返回澄清问题]
+    Parallel -->|条件齐全| Assemble[组装 Skill / Prompt / Tool]
+    Assemble --> Loop[Harness 模型与工具循环]
+    Loop --> Hook[Hook 权限 / 预算 / 上下文治理]
+    Hook --> Tool[只读业务工具]
+    Tool --> Bridge[业务接口重新鉴权]
+    Bridge --> DB[(业务 MySQL)]
+    Loop --> Delivery
+    Loop --> Trace[OTel Span / 本地 Outbox / 可选 Kafka]
+```
+
+| 能力 | 当前实现与边界 |
 |---|---|
-| [架构与分工方案](tianmu-agent/docs/架构与分工方案.md) | 模块边界、里程碑、三人协作 |
-| [接口契约](tianmu-agent/docs/接口契约.md) | HTTP/SSE API 定义 |
-| [Hook 变换链设计](tianmu-agent/docs/Hook变换链设计.md) | 11 时点 + 7 变换链详解 |
-| [Trace 与 Hook 设计](tianmu-agent/docs/Harness-Trace与Hook设计.md) | 可观测体系 |
-| [验证记录](tianmu-agent/docs/验证记录.md) | 测试与冒烟结果 |
+| 入口与预处理 | FAQ 先短路；未命中后加载记忆、做确定性校验，再并行运行三项模型任务 |
+| Harness | 步数、调用次数、超时、取消和终态仲裁；预算尚不包含完整 Token/费用账本 |
+| 扩展 | Hook、Tool、Skill、Prompt 分目录；资源从 classpath 加载，修改需构建重启 |
+| Trace | OTel、文件 Outbox、可选 Kafka；有故障与重放边界，不承诺零丢失 |
+| 存储 | 默认内存；可选 MySQL 权威记录、Redis 会话视图、私有文件产物 |
+| 真实业务接入 | JWT 签名与 Redis 在线校验、自己发布的视频、查询时再次鉴权 |
+| 首个真实指标 | 按日期统计当前仍保留的已入库弹幕，不等于全部已发送弹幕或历史删除记录 |
+| 视频平台 | Netty / RocketMQ / Canal / Redis / MinIO / Elasticsearch；完整平台需要自行部署依赖，尚无统一性能基准 |
 
-## Roadmap
+## 真实模型、存储与业务模式
 
-- [x] 视频平台核心功能(弹幕/评论/上传/搜索)
-- [x] Agent M0 基架(Runtime/Hook/Trace)
-- [x] DeepSeek 模型接入
-- [x] MySQL/Redis 持久化
-- [ ] 真实 DokiTV 只读查询接口对接
-- [ ] 运营前端界面
-- [ ] Q&A 缓存层(权限桶 + 时效校验)
-- [ ] 多 Agent 协作
+变量清单见 [.env.example](.env.example)，具体启动方法见 [部署说明](docs/DEPLOYMENT.md)。Java 不会自动读取 `.env`，需要向进程环境注入。真实 Key、密码和 Token 不要写进源码或文档。
 
-## License
+- `demo`：默认，模拟身份、数据和模型。
+- `demo,deepseek`：演示权限与数据，真实模型；会产生模型费用。
+- `demo,persistent`：演示身份与数据，MySQL/Redis 持久化。
+- `business,deepseek,persistent`：真实业务认证与指标、真实模型、Agent 专用存储。
 
-MIT
+两个 Maven 工程分别构建，根目录并非 Maven 聚合工程。完整视频平台的历史建表迁移尚未整理为可直接初始化的全套脚本，不把它作为首次体验入口。P0 的测试建表文件仅适用于隔离测试，不能用于初始化生产业务库。
+
+## 目录
+
+```text
+src/                         视频业务服务（com.orangecode.tianmu）
+  main/.../agentbridge/      鉴权与只读指标桥接
+  main/resources/db/manual/ 人工审阅的索引与对账 SQL
+tianmu-agent/                独立 Agent Maven 工程
+  src/main/java/.../         api / runtime / harness / adapters / tool
+  src/main/resources/        prompts / skills / tools / faq
+  infra/                     可选 MySQL、Redis、Kafka 容器配置
+  docs/                      架构、接口与验收记录
+scripts/                     发布检查与免 Key 冒烟
+docs/                        部署、协作任务与发布说明
+面试拷打/                    历史学习笔记，不作为性能或生产验收依据
+```
+
+## 验证与参与
+
+当前本地验证包括 Agent 114 项测试、业务模块 14 项测试、此前 P0 的 13 项双服务检查，以及 Flash + V4 Pro 的一次真实模型任务；它们使用隔离测试数据。此次开源整理新增密钥配置测试、发布扫描和默认 Demo 冒烟，最新结果见 [开源准备记录](docs/OPEN_SOURCE_READINESS.md)。GitHub Actions 工作流需推送后才能在远端运行。
+
+- [参与贡献](CONTRIBUTING.md) · [可领取的任务](docs/ROADMAP.md) · [安全反馈](SECURITY.md)
+- [总体架构](tianmu-agent/docs/总体架构.md) · [工程扩展规范](tianmu-agent/docs/工程目录与扩展规范.md)
+- [接口契约](tianmu-agent/docs/接口契约.md) · [P0 业务接入](tianmu-agent/docs/P0业务接入.md)
+- [P0 验收记录](tianmu-agent/docs/P0业务接入验收.md) · [第三方依赖](docs/THIRD_PARTY.md)
+
+接下来优先做正式业务环境验收、完整建表迁移和可复现部署、指标与模型评测，再扩展业务工具。欢迎从文档、测试和单个 Tool 开始贡献。
+
+## 许可证与来源
+
+本项目原名 DokiTV，现为 Tianmu，保留 Git 历史中的作者记录，按 [MIT](LICENSE) 授权。第三方组件和模型服务适用各自条款，见 [NOTICE](NOTICE)。

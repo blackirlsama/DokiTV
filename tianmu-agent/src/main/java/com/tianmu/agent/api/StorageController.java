@@ -23,12 +23,16 @@ public class StorageController {
         var repository = storage.getIfAvailable();
         if (repository == null) throw new AgentException("STORAGE_REQUIRED", "Enable persistent storage for this endpoint"); return repository;
     }
+    private String credential(String auth) {
+        if (auth == null || !auth.startsWith("Bearer ")) throw new AgentException("UNAUTHORIZED", "Bearer authentication is required");
+        return auth.substring(7);
+    }
     @GetMapping("/sessions/{id}/messages")
     public List<MemoryTypes.Message> messages(@PathVariable UUID id, @RequestHeader(value="Authorization", required=false) String auth,
-            @RequestParam(defaultValue="9223372036854775807") long before) { return runs.messages(id, access(auth), before); }
+            @RequestParam(defaultValue="9223372036854775807") long before) { return runs.messages(id, identity.forSession(credential(auth), id, before), before); }
     @GetMapping("/runs/{id}/artifacts")
     public List<Map<String, Object>> artifacts(@PathVariable UUID id, @RequestHeader(value="Authorization", required=false) String auth) {
-        AccessScope owner = access(auth); return persistent().artifacts(id, owner);
+        AccessScope owner = identity.forRun(credential(auth), id); return persistent().artifacts(id, owner);
     }
     @DeleteMapping("/sessions/{id}")
     public ResponseEntity<Void> delete(@PathVariable UUID id, @RequestHeader(value="Authorization", required=false) String auth) {
@@ -36,7 +40,7 @@ public class StorageController {
     }
     @GetMapping("/runs/{id}/artifacts/{artifact}")
     public ResponseEntity<byte[]> artifact(@PathVariable UUID id, @PathVariable String artifact, @RequestHeader(value="Authorization", required=false) String auth) {
-        AccessScope owner = access(auth);
+        AccessScope owner = identity.forRun(credential(auth), id);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.APPLICATION_JSON)
                 .header("X-Content-Type-Options", "nosniff").body(persistent().artifact(id, artifact, owner));
     }

@@ -89,6 +89,7 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketF
         SendBulletRequest sendBulletRequest = JSONUtil.toBean(text, SendBulletRequest.class);
         Snowflake snowflake = IdUtil.getSnowflake(SnowflakeConstant.WORKER_ID, SnowflakeConstant.DATA_CENTER_ID);
         sendBulletRequest.setBulletId(snowflake.nextId());
+        sendBulletRequest.setCreateTime(new java.util.Date());
         String messageMQ = JSONUtil.parse(sendBulletRequest).toString();
 
         // 生产
