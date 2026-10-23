@@ -1,2 +1,5 @@
 /mvnw text eol=lf
 *.cmd text eol=crlf
+/deploy/*.sh text eol=lf
+/deploy/*.py text eol=lf
+/deploy/Dockerfile text eol=lf

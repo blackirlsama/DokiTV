@@ -19,6 +19,29 @@ public final class PreparationTypes {
             if (!required) question = null;
         }
     }
+    /** Untrusted model candidates; PreparationService validates against server-derived task meaning. */
+    public record Understanding(boolean needsClarification, String clarificationQuestion,
+                                Map<String, Object> conditions, String rewrittenQuery) {
+        public Understanding {
+            conditions = ImmutablePayload.map(conditions);
+            if (conditions.size() > 16 || conditions.entrySet().stream().anyMatch(e ->
+                    !e.getKey().matches("[a-z][a-z0-9_]{0,63}") || e.getValue() == null
+                    || !(e.getValue() instanceof String || e.getValue() instanceof Number || e.getValue() instanceof Boolean)
+                    || e.getValue() instanceof String text && text.length() > 256))
+                throw new IllegalArgumentException("Invalid understanding conditions");
+            if (needsClarification) {
+                new Clarification(true, clarificationQuestion);
+                if (rewrittenQuery != null || !conditions.isEmpty())
+                    throw new IllegalArgumentException("Clarification cannot carry executable candidates");
+            } else if (clarificationQuestion != null) {
+                throw new IllegalArgumentException("Executable understanding cannot request clarification");
+            }
+        }
+        public static Understanding clarify(String question) { return new Understanding(true, question, Map.of(), null); }
+        public static Understanding proceed(Map<String, Object> conditions, String query) {
+            return new Understanding(false, null, conditions, query);
+        }
+    }
     public record FaqAnswer(String id, String version, String text) {
         public FaqAnswer {
             if (id == null || !id.matches("[a-zA-Z0-9_.-]{1,80}") || version == null || !version.matches("[a-zA-Z0-9_.-]{1,40}")

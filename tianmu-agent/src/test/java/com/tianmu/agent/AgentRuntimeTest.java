@@ -28,6 +28,15 @@ class AgentRuntimeTest {
     private AccessScope alice() { return new AccessScope("demo", "alice", Set.of(1001L)); }
     private RunState run(String message) { return new RunState(alice(), message); }
     private AgentRuntime with(ModelPort model) { return new AgentRuntime(model, tools, harness); }
+    @Test void anonymousProbesExposeStatusWithoutOpeningOtherManagementEndpoints() throws Exception {
+        for (String probe : List.of("liveness", "readiness")) {
+            String body = mvc.perform(get("/actuator/health/" + probe)).andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+            assertEquals("UP", new com.fasterxml.jackson.databind.ObjectMapper().readTree(body).path("status").asText());
+            assertFalse(body.contains("components")); assertFalse(body.contains("details"));
+        }
+        mvc.perform(get("/actuator/env")).andExpect(status().isNotFound());
+    }
 
     private Snapshot await(RunState run) throws InterruptedException {
         long end = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);

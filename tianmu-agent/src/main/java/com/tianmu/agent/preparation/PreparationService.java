@@ -59,46 +59,57 @@ public class PreparationService implements AutoCloseable {
         finally { dispose(lookup); }
         run.checkpoint();
         if (hit.isPresent()) return new Result(Route.FAQ,
-                new PreparedRequest(run.message, query, Emotion.UNKNOWN, degraded, Set.of("clarification", "rewrite", "emotion")), hit.get(), null);
+                new PreparedRequest(run.message, query, Emotion.UNKNOWN, degraded, Set.of("understanding", "emotion")), hit.get(), null);
 
         if (repository != null) run.memory(repository.memory(run));
         Input contextInput = new Input(query, run.businessDate, run.owner, run.memory());
         Optional<Clarification> required = harness.stage(run, "agent.prepare.validate", null, null, Map.of(),
                 () -> validators.stream().map(v -> v.validate(contextInput)).flatMap(Optional::stream).filter(Clarification::required).findFirst());
         if (required.isPresent()) return new Result(Route.CLARIFY,
-                new PreparedRequest(run.message, query, Emotion.UNKNOWN, degraded, Set.of("clarification", "rewrite", "emotion")), null, required.get().question());
+                new PreparedRequest(run.message, query, Emotion.UNKNOWN, degraded, Set.of("understanding", "emotion")), null, required.get().question());
 
         run.emit("PROGRESS", Map.of("stage", "preparing"));
-        Instant end = deadline(run, policy.parallelTimeout());
-        Instant rewriteEnd = earlier(end, deadline(run, policy.rewriteTimeout()));
+        Instant end = deadline(run, policy.understandingTimeout());
         Instant emotionEnd = earlier(end, deadline(run, policy.emotionTimeout()));
-        // Submit the critical branch first; all branches still start independently.
-        Branch<Clarification> clarification = submit(run, "clarification", end, c -> model.clarify(contextInput, c));
-        Branch<String> rewrite = submit(run, "rewrite", rewriteEnd, c -> model.rewrite(contextInput, c));
+        // The critical branch is submitted first; emotion is independent and never awaited separately.
+        Branch<Understanding> understanding = submit(run, "understanding", end, c -> model.understand(contextInput, c));
         Branch<Emotion> emotion = submit(run, "emotion", emotionEnd, c -> model.emotion(contextInput, c));
         try {
-            Clarification question;
-            try { question = await(run, clarification, end); }
+            Understanding result;
+            try { result = await(run, understanding, end); }
             catch (PreparationUnavailable e) {
-                degraded.add("clarification");
-                question = new Clarification(true, "暂时无法确认查询条件，请明确要分析的视频、指标和日期后重试。");
+                degraded.add("understanding");
+                result = Understanding.clarify("暂时无法确认查询条件，请明确要分析的视频、指标和日期后重试。");
             }
-            if (question.required()) {
+            if (!result.needsClarification() && !validConditions(contextInput, result.conditions())) {
+                degraded.add("understanding");
+                result = Understanding.clarify("查询条件存在冲突，请明确要查询的视频、日期和指标。");
+            }
+            if (result.needsClarification()) {
                 skipped.add("rewrite");
                 Emotion feeling = readyEmotion(run, emotion, emotionEnd, degraded, skipped);
-                return new Result(Route.CLARIFY, new PreparedRequest(run.message, query, feeling, degraded, skipped), null, question.question());
+                return new Result(Route.CLARIFY, new PreparedRequest(run.message, query, feeling, degraded, skipped), null, result.clarificationQuestion());
             }
-            String rewritten;
-            try {
-                rewritten = await(run, rewrite, rewriteEnd);
-                if (!safeRewrite(query, rewritten)
-                        || !meaning.resolve(query, run.businessDate).equals(meaning.resolve(rewritten, run.businessDate)))
-                    throw new PreparationUnavailable();
-            } catch (PreparationUnavailable e) { degraded.add("rewrite"); rewritten = query; }
+            String rewritten = result.rewrittenQuery();
+            if (!safeRewrite(query, rewritten)
+                    || !meaning.resolve(query, run.businessDate).equals(meaning.resolve(rewritten, run.businessDate))) {
+                degraded.add("rewrite"); rewritten = query;
+            }
             Emotion feeling = readyEmotion(run, emotion, emotionEnd, degraded, skipped);
             run.checkpoint();
             return new Result(Route.HARNESS, new PreparedRequest(run.message, rewritten, feeling, degraded, skipped), null, null);
-        } finally { dispose(clarification); dispose(rewrite); dispose(emotion); }
+        } finally { dispose(understanding); dispose(emotion); }
+    }
+    /** Model candidates never grant scope or supply missing server-side task conditions. */
+    private boolean validConditions(Input input, Map<String, Object> proposed) {
+        Map<String, Object> expected = meaning.resolve(input.query(), input.businessDate()).conditions();
+        if (!expected.keySet().equals(proposed.keySet())) return false;
+        return expected.entrySet().stream().allMatch(e -> {
+            Object actual = proposed.get(e.getKey());
+            if (e.getValue() instanceof Number number && actual instanceof Number candidate)
+                return new java.math.BigDecimal(number.toString()).compareTo(new java.math.BigDecimal(candidate.toString())) == 0;
+            return Objects.equals(e.getValue(), actual);
+        });
     }
     private Emotion readyEmotion(RunState run, Branch<Emotion> branch, Instant end, Set<String> degraded, Set<String> skipped) {
         if (!branch.future().isDone()) { skipped.add("emotion"); return Emotion.UNKNOWN; }

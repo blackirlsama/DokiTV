@@ -1,0 +1,80 @@
+name: ${TIANMU_STACK_NAME:-tianmu-staging}
+services:
+  mysql:
+    image: ${MYSQL_IMAGE:-mysql:8.4}
+    restart: unless-stopped
+    mem_limit: 512m
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_bin", "--default-time-zone=+00:00", "--innodb-buffer-pool-size=128M", "--max-connections=40", "--performance-schema=OFF"]
+    environment:
+      MYSQL_DATABASE: tianmu_agent
+      MYSQL_USER: agent
+      MYSQL_PASSWORD_FILE: /run/secrets/agent-db-password
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql-root-password
+    secrets: [agent-db-password, mysql-root-password]
+    volumes: [mysql-data:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$(cat /run/secrets/mysql-root-password) mysql --protocol=TCP -h127.0.0.1 -uroot --batch --skip-column-names -e 'SELECT 1' | grep -qx 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    logging: &logging
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+  redis:
+    image: ${REDIS_IMAGE:-redis:7.4}
+    restart: unless-stopped
+    mem_limit: 192m
+    entrypoint: ["/bin/sh", "/usr/local/bin/tianmu-redis.sh"]
+    volumes: [./redis-entrypoint.sh:/usr/local/bin/tianmu-redis.sh:ro]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=8m"]
+    secrets: [redis-password]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(cat /run/secrets/redis-password) redis-cli ping | grep -qx PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging: *logging
+  agent:
+    image: tianmu-agent:${TIANMU_IMAGE_TAG:?Build a release first}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: "10001:10001"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: ${AGENT_MEMORY_LIMIT:-768m}
+    stop_grace_period: 45s
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m,uid=10001,gid=10001"]
+    ports: ["127.0.0.1:${AGENT_HTTP_PORT:-18201}:8201"]
+    environment:
+      SERVER_ADDRESS: 0.0.0.0
+      SERVER_PORT: "8201"
+      SPRING_PROFILES_ACTIVE: demo,persistent
+      AGENT_JDBC_URL: jdbc:mysql://mysql:3306/tianmu_agent?serverTimezone=UTC&allowPublicKeyRetrieval=true&sslMode=DISABLED
+      AGENT_DB_USER: agent
+      AGENT_DB_PASSWORD_FILE: /run/secrets/agent-db-password
+      AGENT_REDIS_HOST: redis
+      AGENT_REDIS_PORT: "6379"
+      AGENT_REDIS_PASSWORD_FILE: /run/secrets/redis-password
+      AGENT_OBJECT_DIRECTORY: /data/artifacts
+      HARNESS_TRACE_DIRECTORY: /data/trace
+      JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8 -Duser.timezone=UTC
+    secrets: [agent-db-password, redis-password]
+    volumes: [artifacts:/data/artifacts, traces:/data/trace]
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    logging: *logging
+secrets:
+  agent-db-password:
+    file: ${TIANMU_SECRETS_DIR:?Initialize private runtime configuration}/agent-db-password
+  mysql-root-password:
+    file: ${TIANMU_SECRETS_DIR:?Initialize private runtime configuration}/mysql-root-password
+  redis-password:
+    file: ${TIANMU_SECRETS_DIR:?Initialize private runtime configuration}/redis-password
+volumes:
+  mysql-data:
+  artifacts:
+  traces:

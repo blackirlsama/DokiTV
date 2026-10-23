@@ -6,7 +6,7 @@ Credentials are read from environment (or an untracked --env-file), never printe
 """
 import argparse
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -55,8 +55,7 @@ class SimulatedModel:
         prompt = body["messages"][0]["content"]
         data = json.loads(body["messages"][-1]["content"])
         if body["model"] == "mock-preparation":
-            stage = "emotion" if '"emotion"' in prompt else (
-                "clarification" if '"required"' in prompt else "rewrite")
+            stage = "emotion" if '"emotion"' in prompt else "understanding"
         else:
             stage = "harness"
         with self.lock:
@@ -69,16 +68,28 @@ class SimulatedModel:
                 if call["mode"] == "emotion-slow":
                     time.sleep(3)
                 return 200, {"emotion": "NEGATIVE" if call["mode"] == "negative-emotion" else "NEUTRAL"}
-            if stage == "clarification":
-                if call["mode"] == "clarification-failure":
+            if stage == "understanding":
+                if call["mode"] == "understanding-failure":
                     return 503, None
-                return 200, {"required": False, "question": None}
-            if stage == "rewrite":
+                query = data["query"]
+                video = re.search(r"视频\s*(\d+)", query)
+                explicit_date = re.search(r"\d{4}-\d{2}-\d{2}", query)
+                date = explicit_date.group() if explicit_date else (
+                    (datetime.fromisoformat(data["businessDate"]).date() - timedelta(days=1)).isoformat()
+                    if "昨天" in query else None)
+                if not video or not date or "弹幕" not in query:
+                    return 200, {"needsClarification": True, "clarificationQuestion": "请补充视频、日期和指标。",
+                                 "conditions": {}, "rewrittenQuery": None}
+                conditions = {"video_id": int(video.group(1)), "date": date, "metric": "bullet_count"}
+                rewritten = query.replace("帮我查一下", "查询")
                 if call["mode"] == "rewrite-failure":
-                    return 503, None
+                    rewritten = None
                 if call["mode"] == "unsafe-rewrite":
-                    return 200, {"query": data["query"].replace("1001", "1002")}
-                return 200, {"query": data["query"].replace("帮我查一下", "查询")}
+                    rewritten = query.replace("1001", "1002")
+                if call["mode"] == "unsafe-conditions":
+                    conditions["video_id"] = 1002
+                return 200, {"needsClarification": False, "clarificationQuestion": None,
+                             "conditions": conditions, "rewrittenQuery": rewritten}
             if call["mode"] == "harness-slow":
                 time.sleep(4)
             if call["mode"] == "malformed":
@@ -266,7 +277,7 @@ class FlowSimulation:
                    "-jar", str(Path(self.args.jar).resolve()),
                    "--spring.profiles.active=" + getattr(self.args, "profiles", "demo,deepseek,persistent"), f"--server.port={self.port}",
                    "--harness.trace.sink=file", "--harness.trace.directory=" + str(trace),
-                   "--agent.preparation.parallel-timeout=2s", "--agent.preparation.rewrite-timeout=1500ms",
+                   "--agent.preparation.understanding-timeout=2s",
                    "--agent.preparation.emotion-timeout=1s", "--harness.loop.model-timeout=2s",
                    "--harness.loop.request-timeout=20s"]
         self.process = subprocess.Popen(command, env=env, cwd=self.output, stdout=log,
@@ -325,11 +336,11 @@ class FlowSimulation:
                        preparationCalls=metric["preparationCalls"], modelCalls=metric["modelCalls"])
             calls = self.model.calls[before:]
             branches = [next(c for c in calls if c["stage"] == stage)
-                        for stage in ("emotion", "clarification", "rewrite")]
+                        for stage in ("emotion", "understanding")]
             require(max(c["start"] for c in branches) < min(c["end"] for c in branches),
                     "Preparation branches did not overlap")
             first_harness = next(c for c in calls if c["stage"] == "harness")
-            require(first_harness["start"] >= max(c["end"] for c in branches[:0:-1]),
+            require(first_harness["start"] >= next(c["end"] for c in branches if c["stage"] == "understanding"),
                     "Harness started before critical preparation completed")
             memory = first_harness["input"]["memory"]
             require(len(memory["recent"]) == 4 and memory["boundary"], "History/focus boundary missing")
@@ -389,14 +400,20 @@ class FlowSimulation:
                     unsafe["task"]["specification"]["conditions"]["video_id"] == 1001,
                     "Unsafe rewrite changed the user's video")
             self.check("unsafe_rewrite_preserves_original_conditions")
-            self.model.mode = "clarification-failure"
+            self.model.mode = "understanding-failure"
             before = len(self.model.calls)
             unavailable = self.terminal(self.create("查询视频1001昨天的弹幕数"))
             require(unavailable["status"] == "NEEDS_INPUT" and
-                    "clarification" in unavailable["preparation"]["degradedStages"] and
+                    "understanding" in unavailable["preparation"]["degradedStages"] and
                     not any(c["stage"] == "harness" for c in self.model.calls[before:]),
-                    "Unavailable clarification must not silently enter Harness")
-            self.check("clarification_failure_stops_before_harness")
+                    "Unavailable understanding must not silently enter Harness")
+            self.check("understanding_failure_stops_before_harness")
+            self.model.mode = "unsafe-conditions"
+            conflicting = self.terminal(self.create("查询视频1001昨天的弹幕数"))
+            require(conflicting["status"] == "NEEDS_INPUT" and
+                    "understanding" in conflicting["preparation"]["degradedStages"] and conflicting["task"] is None,
+                    "Model conditions bypassed server validation")
+            self.check("conflicting_understanding_conditions_rejected")
             self.model.mode = "negative-emotion"
             negative = self.terminal(self.create("帮我查一下视频1001昨天的弹幕数，最近效果很差，有点着急"))
             require(negative["status"] == "SUCCEEDED" and negative["preparation"]["emotion"] == "NEGATIVE",
@@ -471,7 +488,7 @@ class FlowSimulation:
                     records.extend(json.loads(line) for line in path.read_text(encoding="utf-8").splitlines())
             main_trace = [r for r in records if r["traceId"] == metric["traceId"]]
             names = {r["name"] for r in main_trace}
-            require({"agent.run", "agent.prepare.emotion", "agent.prepare.clarification", "agent.prepare.rewrite",
+            require({"agent.run", "agent.prepare.emotion", "agent.prepare.understanding",
                      "agent.assemble", "agent.model", "agent.tool", "agent.skill"} <= names,
                     "End-to-end Trace stages missing")
             require(all(r.get("spanId") for r in main_trace), "Trace span IDs missing")

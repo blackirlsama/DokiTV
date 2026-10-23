@@ -1,0 +1,14 @@
+# Explicit opt-in: requires an existing HTTPS business bridge and a private model key file.
+services:
+  agent:
+    environment:
+      SPRING_PROFILES_ACTIVE: business,deepseek,persistent
+      BUSINESS_BASE_URL: ${BUSINESS_BASE_URL:?Configure an authenticated HTTPS business bridge}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      PREPARATION_MODEL: ${PREPARATION_MODEL:-deepseek-flash}
+      HARNESS_MODEL: ${HARNESS_MODEL:-deepseek-v4-pro}
+      DEEPSEEK_API_KEY_FILE: /run/secrets/model-api-key
+    secrets: [model-api-key]
+secrets:
+  model-api-key:
+    file: ${TIANMU_SECRETS_DIR:?Initialize private runtime configuration}/model-api-key

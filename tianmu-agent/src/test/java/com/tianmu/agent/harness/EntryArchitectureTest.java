@@ -42,18 +42,17 @@ class EntryArchitectureTest {
             assertEquals(0, run.snapshot().totalModelCalls()); assertNull(run.task());
         }
     }
-    @Test void clarificationCancelsBothUnneededBranchesBeforeReturning() throws Exception {
-        CountDownLatch siblings = new CountDownLatch(2), release = new CountDownLatch(1);
+    @Test void clarificationCancelsOptionalEmotionBeforeReturning() throws Exception {
+        CountDownLatch siblings = new CountDownLatch(1), release = new CountDownLatch(1);
         AtomicInteger cancelled = new AtomicInteger(); ExecutorService worker = Executors.newSingleThreadExecutor();
         try (var f = new HarnessLifecycleTest.Fixture(); var prep = new PreparationService((i, c) -> Optional.empty(), new PreparationFlowTest.Model() {
             void block(CallControl c) { c.cancellation().onCancel(cancelled::incrementAndGet); siblings.countDown(); waitFor(release); }
             public Emotion emotion(Input i, CallControl c) { block(c); return Emotion.NEUTRAL; }
-            public String rewrite(Input i, CallControl c) { block(c); return i.query(); }
-            public Clarification clarify(Input i, CallControl c) { waitFor(siblings); return new Clarification(true, "Which video?"); }
+            public Understanding understand(Input i, CallControl c) { waitFor(siblings); return Understanding.clarify("Which video?"); }
         }, policy(), f.harness)) {
             RunState run = f.run(); Future<?> task = worker.submit(() -> execute(f, prep, run));
             assertTrue(siblings.await(1, TimeUnit.SECONDS)); task.get(1, TimeUnit.SECONDS);
-            assertEquals(Status.NEEDS_INPUT, run.snapshot().status()); assertEquals(2, cancelled.get());
+            assertEquals(Status.NEEDS_INPUT, run.snapshot().status()); assertEquals(1, cancelled.get());
             assertEquals(0, run.snapshot().modelCalls()); assertNull(run.task());
         } finally { release.countDown(); worker.shutdownNow(); }
     }
@@ -62,8 +61,7 @@ class EntryArchitectureTest {
         ExecutorService worker = Executors.newSingleThreadExecutor();
         try (var f = new HarnessLifecycleTest.Fixture(); var prep = new PreparationService((i, c) -> Optional.empty(), new PreparationFlowTest.Model() {
             public Emotion emotion(Input i, CallControl c) { entered.countDown(); waitFor(release); return Emotion.NEGATIVE; }
-            public Clarification clarify(Input i, CallControl c) { waitFor(entered); return new Clarification(false, null); }
-            public String rewrite(Input i, CallControl c) { waitFor(entered); return i.query(); }
+            public Understanding understand(Input i, CallControl c) { waitFor(entered); return accepted(i, i.query()); }
         }, policy(), f.harness)) {
             RunState run = f.run(); Future<?> task = worker.submit(() -> execute(f, prep, run));
             assertTrue(entered.await(1, TimeUnit.SECONDS)); task.get(1, TimeUnit.SECONDS);
@@ -72,20 +70,19 @@ class EntryArchitectureTest {
             assertTrue(run.preparedRequest().skippedStages().contains("emotion"));
         } finally { release.countDown(); worker.shutdownNow(); }
     }
-    @Test void rewriteHasItsOwnTimeoutAndFallsBackToOriginalQuery() {
+    @Test void understandingTimeoutAsksForClarificationWithoutEnteringHarness() {
         CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
         try (var f = new HarnessLifecycleTest.Fixture(); var prep = new PreparationService((i, c) -> Optional.empty(), new PreparationFlowTest.Model() {
-            public String rewrite(Input i, CallControl c) { entered.countDown(); waitFor(release); return "late"; }
-            public Clarification clarify(Input i, CallControl c) { waitFor(entered); return new Clarification(false, null); }
-        }, new PreparationPolicy(Duration.ofMillis(200), Duration.ofSeconds(2), Duration.ofMillis(50), Duration.ofMillis(50)), f.harness)) {
+            public Understanding understand(Input i, CallControl c) { entered.countDown(); waitFor(release); return accepted(i, i.query()); }
+        }, new PreparationPolicy(Duration.ofMillis(200), Duration.ofMillis(50), Duration.ofMillis(50)), f.harness)) {
             RunState run = f.run(); assertTimeoutPreemptively(Duration.ofSeconds(1), () -> execute(f, prep, run));
-            assertEquals(Route.HARNESS, run.snapshot().route()); assertEquals(run.message, run.task().query());
-            assertTrue(run.preparedRequest().degradedStages().contains("rewrite"));
+            assertEquals(Route.CLARIFY, run.snapshot().route()); assertNull(run.task());
+            assertTrue(run.preparedRequest().degradedStages().contains("understanding"));
         } finally { release.countDown(); }
     }
     @Test void rewriteCannotRemoveKnownTaskIdentityEvenWhenNumbersAreUnchanged() {
         try (var f = new HarnessLifecycleTest.Fixture(); var prep = new PreparationService((i, c) -> Optional.empty(), new PreparationFlowTest.Model() {
-            public String rewrite(Input i, CallControl c) { return i.query().replace("视频", "账号"); }
+            public Understanding understand(Input i, CallControl c) { return accepted(i, i.query().replace("视频", "账号")); }
         }, policy(), f.harness)) {
             RunState run = new RunState(new AccessScope("demo", "alice", Set.of(1001L)), "查询视频1001昨天的弹幕数");
             execute(f, prep, run); assertEquals(run.message, run.task().query());
@@ -96,7 +93,7 @@ class EntryArchitectureTest {
         CountDownLatch entered = new CountDownLatch(1);
         try (var f = new HarnessLifecycleTest.Fixture(); var prep = new PreparationService((i, c) -> Optional.empty(), new PreparationFlowTest.Model() {
             public Emotion emotion(Input i, CallControl c) { throw new AgentException("FORBIDDEN", "Denied"); }
-            public Clarification clarify(Input i, CallControl c) { c.cancellation().onCancel(entered::countDown); waitFor(entered); c.checkpoint(); return new Clarification(false, null); }
+            public Understanding understand(Input i, CallControl c) { c.cancellation().onCancel(entered::countDown); waitFor(entered); c.checkpoint(); return accepted(i, i.query()); }
         }, policy(), f.harness)) {
             RunState run = f.run(); execute(f, prep, run);
             assertEquals(Status.FAILED, run.snapshot().status()); assertEquals("FORBIDDEN", run.snapshot().errorCode());
@@ -104,19 +101,18 @@ class EntryArchitectureTest {
         }
     }
     @Test void preparationAndLoopShareOneModelCallBudget() {
-        var limits = new LoopPolicy(6, Duration.ofSeconds(5), Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(1), 3, true, 4);
-        CyclicBarrier started = new CyclicBarrier(3);
+        var limits = new LoopPolicy(6, Duration.ofSeconds(5), Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(1), 3, true, 3);
+        CyclicBarrier started = new CyclicBarrier(2);
         try (var f = new LoopControlTest.Fixture(limits); var prep = new PreparationService((i, c) -> Optional.empty(), new PreparationFlowTest.Model() {
             void meet() { try { started.await(1, TimeUnit.SECONDS); } catch (Exception e) { throw new IllegalStateException(e); } }
             public Emotion emotion(Input i, CallControl c) { meet(); return Emotion.NEUTRAL; }
-            public String rewrite(Input i, CallControl c) { meet(); return i.query(); }
-            public Clarification clarify(Input i, CallControl c) { meet(); return new Clarification(false, null); }
+            public Understanding understand(Input i, CallControl c) { meet(); return accepted(i, i.query()); }
         }, policy(), f.harness)) {
             RunState run = f.run(); AtomicInteger main = new AtomicInteger();
             var runtime = new AgentRuntime(c -> { main.incrementAndGet(); return Decision.tool("list_skills", Map.of()); }, f.tools, f.harness);
             new RequestOrchestrator(prep, runtime, f.harness).execute(run);
             assertEquals("MODEL_CALL_BUDGET_EXCEEDED", run.snapshot().errorCode());
-            assertEquals(3, run.snapshot().preparationCalls()); assertEquals(4, run.snapshot().totalModelCalls()); assertEquals(1, main.get());
+            assertEquals(2, run.snapshot().preparationCalls()); assertEquals(3, run.snapshot().totalModelCalls()); assertEquals(1, main.get());
         }
     }
     @Test void preparedTaskFreezesBusinessDateConditionsAndResourceVersions() {

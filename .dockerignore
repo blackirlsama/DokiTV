@@ -1,0 +1,16 @@
+**
+!tianmu-agent/
+!tianmu-agent/pom.xml
+!tianmu-agent/src/
+!tianmu-agent/src/**
+!deploy/
+!deploy/Dockerfile
+!deploy/HealthProbe.java
+!deploy/entrypoint.sh
+**/application-local.yml
+**/application-secrets.yml
+**/*.pem
+**/*.key
+**/.env*
+**/*-env.json
+**/*fixture*.json

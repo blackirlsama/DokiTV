@@ -65,14 +65,34 @@ class DeepSeekAdapterTest {
         }
         assertFalse(properties.toString().contains("test-secret"));
     }
-    @Test void structuredPreparationFlagsAndRewriteAreParsedWithoutBooleanCoercion() {
+    String understood(String query) {
+        return "{\"needsClarification\":false,\"clarificationQuestion\":null,\"conditions\":{\"video_id\":1001,\"date\":\"2026-10-20\",\"metric\":\"bullet_count\"},\"rewrittenQuery\":\"" + query + "\"}";
+    }
+    @Test void singleUnderstandingCallParsesClarificationConditionsAndRewrite() {
         var port = new DeepSeekAdapters().deepSeekPreparation(client, properties, mapper, new PromptCatalog());
-        answer = request -> "{\"required\":false,\"question\":null}";
-        assertFalse(port.clarify(input(), control()).required());
-        answer = request -> "{\"required\":\"false\",\"question\":null}";
-        assertThrows(IllegalArgumentException.class, () -> port.clarify(input(), control()));
-        answer = request -> "{\"query\":\"视频1001昨天的弹幕数\"}";
-        assertEquals(input().query(), port.rewrite(input(), control()));
+        answer = request -> understood(input().query());
+        Understanding result = port.understand(input(), control());
+        assertFalse(result.needsClarification());
+        assertEquals(input().query(), result.rewrittenQuery());
+        assertEquals(1001, result.conditions().get("video_id"));
+        assertEquals(1, requests.size());
+        assertFalse(requests.get(0).toString().contains("private-user"));
+        answer = request -> "{\"needsClarification\":true,\"clarificationQuestion\":\"Which date?\",\"conditions\":{},\"rewrittenQuery\":null}";
+        assertEquals("Which date?", port.understand(input(), control()).clarificationQuestion());
+    }
+    @Test void understandingRejectsCoercionExtraFieldsAndContradictoryPayloads() {
+        var port = new DeepSeekAdapters().deepSeekPreparation(client, properties, mapper, new PromptCatalog());
+        for (String invalid : List.of(
+                understood("query").replace("\"needsClarification\":false", "\"needsClarification\":\"false\""),
+                understood("query").replace("\"video_id\":1001", "\"video_id\":{\"nested\":1001}"),
+                understood("query").replace("\"clarificationQuestion\":null", "\"clarificationQuestion\":\"Which date?\""),
+                understood("query").replace("\"needsClarification\":false", "\"needsClarification\":true")
+                        .replace("\"clarificationQuestion\":null", "\"clarificationQuestion\":\"Which date?\""),
+                understood("query").replace("\"rewrittenQuery\":\"query\"", "\"rewrittenQuery\":7"),
+                understood("query").replace("\"conditions\":{", "\"extra\":true,\"conditions\":{"))) {
+            answer = request -> invalid;
+            assertThrows(IllegalArgumentException.class, () -> port.understand(input(), control()));
+        }
     }
     @Test void invalidDecisionAndProviderAuthFailureAreDistinctAndSanitized() {
         var port = new DeepSeekAdapters().deepSeekHarnessModel(client, properties, mapper, new PromptCatalog());

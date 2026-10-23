@@ -20,6 +20,18 @@ public final class FileObjectStore implements com.tianmu.agent.runtime.store.Obj
         if (!value.startsWith(root) || Files.isSymbolicLink(value)) throw new AgentException("FORBIDDEN", "Invalid object path");
         return value;
     }
+    @Override public void verifyReady() {
+        Path probe = null;
+        try {
+            probe = Files.createTempFile(root, ".readiness-", ".tmp");
+            Files.write(probe, new byte[]{1}, StandardOpenOption.WRITE);
+        } catch (IOException e) {
+            throw new AgentException("OBJECT_STORE_UNAVAILABLE", "Private object destination is unavailable");
+        } finally {
+            if (probe != null) try { Files.deleteIfExists(probe); }
+            catch (IOException e) { throw new AgentException("OBJECT_STORE_UNAVAILABLE", "Private object probe cleanup failed"); }
+        }
+    }
     public void put(String key, byte[] body) {
         if (body.length > 1048576) throw new AgentException("ARTIFACT_TOO_LARGE", "Artifact exceeds 1 MiB");
         try { Files.write(path(key), body, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE); }

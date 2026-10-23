@@ -3,9 +3,8 @@ package com.tianmu.agent.preparation;
 import com.tianmu.agent.core.PreparationTypes.*;
 import com.tianmu.agent.runtime.control.CallControl;
 
-/** Three concurrent, independent small-model calls, each consuming the same original input. */
+/** One critical understanding call and one optional, non-blocking emotion call. */
 public interface PreparationModelPort {
+    Understanding understand(Input input, CallControl control);
     Emotion emotion(Input input, CallControl control);
-    Clarification clarify(Input input, CallControl control);
-    String rewrite(Input input, CallControl control);
 }

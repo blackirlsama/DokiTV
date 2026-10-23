@@ -21,9 +21,13 @@ java -jar tianmu-agent/target/operations-agent-0.7.0-SNAPSHOT.jar
 flowchart TD
     A["API / RunService：认证、会话、幂等与入队"]
     A --> B["RequestOrchestrator：协调请求"]
-    B --> C["PreparationService：FAQ、规则与并行预处理"]
+    B --> C["PreparationService：FAQ 与前置规则"]
     C -->|FAQ / 澄清| F["DeliveryService：统一交付"]
-    C -->|进入执行| D["TaskAssembler：固定 PreparedTask"]
+    C -->|继续| U["问题理解：澄清 + 条件提取 + 改写"]
+    C -->|并行旁路| M["情绪识别：非阻塞"]
+    U -->|需澄清| F
+    U -->|条件通过校验| D["TaskAssembler：固定 PreparedTask"]
+    M -.已就绪则使用.-> D
     D --> E["AgentRuntime：模型决策与工具循环"]
     E --> F
     F --> G["终态 / 正式记录 / SSE"]
@@ -32,7 +36,7 @@ flowchart TD
 | 目录 | 职责与约束 |
 | --- | --- |
 | `api/` | HTTP / SSE，接口与鉴权接入 |
-| `preparation/` | FAQ、条件检查、澄清 / 改写 / 情绪并行分析 |
+| `preparation/` | FAQ、前置规则、一次问题理解与并行情绪分析 |
 | `application/` | 任务组装、受限历史视图、统一交付 |
 | `runtime/` | 请求编排、循环、状态与调度；`control/` 负责超时、取消和终态竞争 |
 | `harness/` | Hook、Transform 与 Trace |
@@ -41,6 +45,8 @@ flowchart TD
 | `access/`、`query/`、`model/` | 身份、业务查询与模型端口 |
 | `adapters/`、`demo/` | 外部系统适配与本地模拟实现 |
 | `core/`、`resource/` | 共享契约与有界资源读取 |
+
+理解调用超时或候选条件与服务端解析冲突时追问；仅改写无效时回到原文。情绪只取已就绪结果。模型提取的条件不直接作为授权或执行条件。
 
 业务 SQL 位于根工程的 `agentbridge/`，模型协议位于模型适配器。模型返回决策，Runtime 执行工具；工具不能直接控制终态或发送 SSE。
 

@@ -1,16 +1,16 @@
 # DeepSeek：共用 Key，按阶段选择模型
 
-更新日期：2026-10-21。
+更新日期：2026-10-23。
 
 ## 模型分工
 
 | 阶段 | 默认模型 ID | 调用方式 |
 |---|---|---|
-| 情绪、澄清、Query 改写 | deepseek-flash | 三个独立请求并行，共用一个 Key |
+| 问题理解（澄清、条件提取、改写）与情绪 | deepseek-flash | 两个请求并行，共用一个 Key；情绪不额外阻塞 |
 | Harness 决策与无工具收尾 | deepseek-v4-pro | 按循环顺序调用，使用同一 Key |
 | FAQ 命中 | 无 | 静态已批准条目直接交付 |
 
-官方地址为 `https://api.deepseek.com`，调用 `/chat/completions`。截至本文日期，官方推荐 Flash ID 为 `deepseek-flash`；旧 `deepseek-v4-flash` 名称也已转向 Flash 新版本服务。主模型继续使用 `deepseek-v4-pro`。[官方模型说明](https://api-docs.deepseek.com/quick_start/pricing/)
+官方地址为 `https://api.deepseek.com`，调用 `/chat/completions`。本项目默认配置为 `deepseek-flash` 和 `deepseek-v4-pro`，可通过环境变量覆盖；实际可用模型 ID 以账户配置为准。[官方模型说明](https://api-docs.deepseek.com/quick_start/pricing/)
 
 配置项 preparation-model / harness-model 分开，后续切换其中一个不需要改编排代码。两者使用同一个 agent.models.api-key，来自 DEEPSEEK_API_KEY 环境变量。
 
@@ -23,7 +23,7 @@
 先在启动进程的环境中设置 `DEEPSEEK_API_KEY`，再启动：
 
 ```powershell
-java -jar Tianmu-agent-demo.jar --spring.profiles.active=demo,deepseek
+java -jar target/operations-agent-0.7.0-SNAPSHOT.jar --spring.profiles.active=demo,deepseek
 ```
 
 环境变量：
@@ -39,7 +39,9 @@ java -jar Tianmu-agent-demo.jar --spring.profiles.active=demo,deepseek
 
 ## 网络、输出与取消
 
-使用 JDK HttpClient，不额外引入供应商 SDK。连接超时 3 秒；真实模型 profile 下预处理阶段上限 10 秒、改写 8 秒、情绪 3 秒（汇合时未就绪则不额外等待），主循环单次等待 30 秒，收尾 15 秒，请求总时限 120 秒。各阶段仍受总截止时间约束。这些是初始联调参数，需根据实际延迟分布调整。
+使用 JDK HttpClient，不额外引入供应商 SDK。连接超时 3 秒；真实模型 profile 下问题理解上限 10 秒、情绪 3 秒（汇合时未就绪则不额外等待），主循环单次等待 30 秒，收尾 15 秒，请求总时限 120 秒。各阶段仍受总截止时间约束。这些是初始联调参数，需根据实际延迟分布调整。
+
+问题理解一次返回 `needsClarification / clarificationQuestion / conditions / rewrittenQuery`。服务端校验候选条件与原问题的一致性，理解失败保守追问，仅改写不合格时回原文。
 
 当前使用非思考模式、JSON 输出协议，预处理输出上限 384 Token（情绪分支 128），主模型上限 1536 Token。主模型返回现有 TOOL / ANSWER / CLARIFY 决策，再由服务端工具调度器执行；没有让提供商直接运行工具。JSON 模式不等于可信业务输出，严格字段检查、工具参数/权限校验和证据校验继续生效。[官方接口协议](https://api-docs.deepseek.com/api/create-chat-completion/)
 

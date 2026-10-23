@@ -17,25 +17,22 @@ import com.tianmu.agent.runtime.control.CallControl;
 @Configuration
 @Profile("demo")
 public class DemoAdapters {
-    /** Offline fixtures for the small-model port. Replace all three methods in an integration profile. */
+    /** Offline fixtures for the small-model port. Understanding and emotion are separate calls. */
     @Bean @Profile("!deepseek") PreparationModelPort demoPreparationModel() {
         return new PreparationModelPort() {
             public Emotion emotion(Input input, CallControl control) {
                 control.checkpoint();
                 return input.query().contains("太差") || input.query().contains("生气") ? Emotion.NEGATIVE : Emotion.NEUTRAL;
             }
-            public Clarification clarify(Input input, CallControl control) {
+            public Understanding understand(Input input, CallControl control) {
                 control.checkpoint();
                 String text = input.query();
                 if (!Pattern.compile("视频\\s*\\d+").matcher(text).find() || !text.contains("弹幕"))
-                    return new Clarification(true, "演示模式支持单视频弹幕数查询，请提供视频ID、日期和要查询的指标。");
+                    return Understanding.clarify("演示模式支持单视频弹幕数查询，请提供视频ID、日期和要查询的指标。");
                 if (!text.contains("昨天") && !Pattern.compile("\\d{4}-\\d{2}-\\d{2}").matcher(text).find())
-                    return new Clarification(true, "请指定一个 YYYY-MM-DD 格式的日期，或使用“昨天”。");
-                return new Clarification(false, null);
-            }
-            public String rewrite(Input input, CallControl control) {
-                control.checkpoint();
-                return input.query().strip().replaceAll("\\s+", " ");
+                    return Understanding.clarify("请指定一个 YYYY-MM-DD 格式的日期，或使用“昨天”。");
+                return Understanding.proceed(TaskMeaning.defaults().resolve(text, input.businessDate()).conditions(),
+                        text.strip().replaceAll("\\s+", " "));
             }
         };
     }

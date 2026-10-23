@@ -80,7 +80,7 @@ class BusinessFlow(FlowSimulation):
             self.check("business_clarification")
             metric = self.terminal(self.create("昨天", sessionId=sid, replyToRunId=clarification["runId"]))
             require(metric["status"] == "SUCCEEDED", "Business query failed: " + str(metric.get("errorCode")))
-            require(metric["steps"] == 3 and metric["preparationCalls"] == 3 and metric["modelCalls"] == 3, "Unexpected execution chain")
+            require(metric["steps"] == 3 and metric["preparationCalls"] == 2 and metric["modelCalls"] == 3, "Unexpected execution chain")
             require("3 条" in metric["answer"]["text"] and "当前已入库且仍保留" in metric["answer"]["text"], "Metric answer or mandatory qualification missing")
             self.main_run = metric
             self.check("real_business_harness_query", runId=metric["runId"], steps=metric["steps"])

@@ -20,8 +20,10 @@ import static org.junit.jupiter.api.Assertions.*;
 class PreparationFlowTest {
     static class Model implements PreparationModelPort {
         public Emotion emotion(Input i, CallControl c) { return Emotion.NEUTRAL; }
-        public Clarification clarify(Input i, CallControl c) { return new Clarification(false, null); }
-        public String rewrite(Input i, CallControl c) { return i.query(); }
+        Understanding accepted(Input i, String query) {
+            return Understanding.proceed(TaskMeaning.defaults().resolve(i.query(), i.businessDate()).conditions(), query);
+        }
+        public Understanding understand(Input i, CallControl c) { return accepted(i, i.query()); }
     }
     PreparationService service(HarnessLifecycleTest.Fixture f, FaqPort faq, PreparationModelPort model) {
         return new PreparationService(faq, model, new PreparationPolicy(Duration.ofMillis(200), Duration.ofMillis(400)), f.harness);
@@ -47,16 +49,15 @@ class PreparationFlowTest {
             assertTrue(run.snapshot().answer().evidenceIds().isEmpty());
         }
     }
-    @Test void threeBranchesActuallyRunConcurrentlyAndCarryContext() {
-        CyclicBarrier barrier = new CyclicBarrier(3);
+    @Test void understandingAndEmotionRunConcurrentlyAndCarryContext() {
+        CyclicBarrier barrier = new CyclicBarrier(2);
         try (var f = new HarnessLifecycleTest.Fixture(); var prep = service(f, miss(), new Model() {
             void meet() {
                 assertNotNull(org.slf4j.MDC.get("run_id"));
                 try { barrier.await(300, TimeUnit.MILLISECONDS); } catch (Exception e) { throw new IllegalStateException(e); }
             }
             public Emotion emotion(Input i, CallControl c) { meet(); return Emotion.NEGATIVE; }
-            public Clarification clarify(Input i, CallControl c) { meet(); return new Clarification(false, null); }
-            public String rewrite(Input i, CallControl c) { meet(); return i.query() + " please"; }
+            public Understanding understand(Input i, CallControl c) { meet(); return accepted(i, i.query() + " please"); }
         })) {
             RunState run = f.run();
             execute(f, prep, run, context -> {
@@ -69,13 +70,13 @@ class PreparationFlowTest {
             assertEquals(Route.HARNESS, run.snapshot().route());
             assertTrue(run.snapshot().preparation().degradedStages().isEmpty());
             var spans = f.recording.spans.stream().filter(s -> s.getName().startsWith("agent.prepare.")).toList();
-            assertEquals(5, spans.size());
+            assertEquals(4, spans.size());
             assertTrue(spans.stream().allMatch(s -> s.getTraceId().equals(run.snapshot().traceId())));
         }
     }
     @Test void clarificationStopsBeforeHarness() {
         try (var f = new HarnessLifecycleTest.Fixture(); var prep = service(f, miss(), new Model() {
-            public Clarification clarify(Input i, CallControl c) { return new Clarification(true, "Which date?"); }
+            public Understanding understand(Input i, CallControl c) { return Understanding.clarify("Which date?"); }
         })) {
             RunState run = f.run(); execute(f, prep, run, forbidden());
             assertEquals(Route.CLARIFY, run.snapshot().route());
@@ -96,7 +97,7 @@ class PreparationFlowTest {
     @Test void emotionAndRewriteErrorsUseSafeDefaults() {
         try (var f = new HarnessLifecycleTest.Fixture(); var prep = service(f, miss(), new Model() {
             public Emotion emotion(Input i, CallControl c) { throw new IllegalStateException("down"); }
-            public String rewrite(Input i, CallControl c) { return "视频999999昨天的弹幕"; }
+            public Understanding understand(Input i, CallControl c) { return accepted(i, "视频999999昨天的弹幕"); }
         })) {
             RunState run = f.run(); execute(f, prep, run, c -> {
                 assertEquals(run.message, c.message()); return Decision.clarify("ok");
@@ -106,14 +107,14 @@ class PreparationFlowTest {
             assertTrue(run.snapshot().preparation().degradedStages().contains("emotion") || run.snapshot().preparation().skippedStages().contains("emotion"));
         }
     }
-    @Test void clarificationOutageFailsClosed() {
+    @Test void understandingOutageFailsClosed() {
         try (var f = new HarnessLifecycleTest.Fixture(); var prep = service(f, miss(), new Model() {
-            public Clarification clarify(Input i, CallControl c) { throw new IllegalStateException("down"); }
+            public Understanding understand(Input i, CallControl c) { throw new IllegalStateException("down"); }
         })) {
             RunState run = f.run(); execute(f, prep, run, forbidden());
             assertEquals(Status.NEEDS_INPUT, run.snapshot().status());
             assertEquals(Route.CLARIFY, run.snapshot().route());
-            assertTrue(run.snapshot().preparation().degradedStages().contains("clarification"));
+            assertTrue(run.snapshot().preparation().degradedStages().contains("understanding"));
         }
     }
     @Test void slowSiblingDoesNotDiscardCompletedClarification() {
@@ -123,7 +124,7 @@ class PreparationFlowTest {
                 try { release.await(2, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
                 return Emotion.POSITIVE;
             }
-            public Clarification clarify(Input i, CallControl c) { return new Clarification(true, "Which video?"); }
+            public Understanding understand(Input i, CallControl c) { return Understanding.clarify("Which video?"); }
         })) {
             RunState run = f.run(); execute(f, prep, run, forbidden());
             assertEquals("Which video?", run.snapshot().clarification());
@@ -155,7 +156,7 @@ class PreparationFlowTest {
         }
     }
     @Test void cancelDuringParallelPreparationCannotDeliverLateResults() throws Exception {
-        CountDownLatch entered = new CountDownLatch(3), release = new CountDownLatch(1);
+        CountDownLatch entered = new CountDownLatch(2), release = new CountDownLatch(1);
         AtomicInteger cancelCallbacks = new AtomicInteger();
         ExecutorService worker = Executors.newSingleThreadExecutor();
         try (var f = new HarnessLifecycleTest.Fixture(); var prep = service(f, miss(), new Model() {
@@ -164,15 +165,66 @@ class PreparationFlowTest {
                 try { release.await(2, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
             }
             public Emotion emotion(Input i, CallControl c) { block(c); return Emotion.NEUTRAL; }
-            public Clarification clarify(Input i, CallControl c) { block(c); return new Clarification(false, null); }
-            public String rewrite(Input i, CallControl c) { block(c); return i.query(); }
+            public Understanding understand(Input i, CallControl c) { block(c); return accepted(i, i.query()); }
         })) {
             RunState run = f.run();
             Future<?> task = worker.submit(() -> execute(f, prep, run, forbidden()));
             assertTrue(entered.await(2, TimeUnit.SECONDS)); run.cancel(); task.get(2, TimeUnit.SECONDS);
             assertEquals(Status.CANCELLED, run.snapshot().status());
             assertNull(run.snapshot().answer()); assertNull(run.snapshot().preparation());
-            assertEquals(3, cancelCallbacks.get());
+            assertEquals(2, cancelCallbacks.get());
         } finally { release.countDown(); worker.shutdownNow(); }
     }
+    @Test void modelConditionsCannotInventChangeOrOmitServerConditions() {
+        for (Map<String, Object> conditions : List.of(
+                Map.<String, Object>of("video_id", 1002L, "date", java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai")).minusDays(1).toString(), "metric", "bullet_count"),
+                Map.<String, Object>of("video_id", 1001L),
+                Map.<String, Object>of("video_id", "1001", "date", "wrong", "metric", "bullet_count"),
+                Map.<String, Object>of("user_id", "admin"))) {
+            try (var f = new HarnessLifecycleTest.Fixture(); var prep = service(f, miss(), new Model() {
+                public Understanding understand(Input i, CallControl c) { return Understanding.proceed(conditions, i.query()); }
+            })) {
+                RunState run = new RunState(new AccessScope("demo", "alice", Set.of(1001L, 1002L)), "查询视频1001昨天的弹幕数");
+                execute(f, prep, run, forbidden());
+                assertEquals(Status.NEEDS_INPUT, run.snapshot().status());
+                assertTrue(run.preparedRequest().degradedStages().contains("understanding"));
+                assertNull(run.task()); assertEquals(0, f.queries.get());
+            }
+        }
+    }
+    @Test void integerJsonConditionsAreAcceptedButOnlyTheServerSpecificationIsFrozen() {
+        try (var f = new HarnessLifecycleTest.Fixture(); var prep = service(f, miss(), new Model() {
+            public Understanding understand(Input i, CallControl c) {
+                return Understanding.proceed(Map.of("video_id", 1001, "date", i.businessDate().minusDays(1).toString(), "metric", "bullet_count"), i.query());
+            }
+        })) {
+            RunState run = new RunState(new AccessScope("demo", "alice", Set.of(1001L)), "查询视频1001昨天的弹幕数");
+            execute(f, prep, run, c -> Decision.clarify("ready"));
+            assertEquals(Route.HARNESS, run.snapshot().route());
+            assertEquals(1001L, run.task().specification().conditions().get("video_id"));
+            assertEquals("user_input", run.task().specification().provenance().get("video_id"));
+        }
+    }
+    @Test void missingRewriteFallsBackWithoutDiscardingValidUnderstanding() {
+        try (var f = new HarnessLifecycleTest.Fixture(); var prep = service(f, miss(), new Model() {
+            public Understanding understand(Input i, CallControl c) { return accepted(i, null); }
+        })) {
+            RunState run = f.run(); execute(f, prep, run, c -> Decision.clarify("ready"));
+            assertEquals(Route.HARNESS, run.snapshot().route());
+            assertEquals(run.message, run.task().query());
+            assertTrue(run.preparedRequest().degradedStages().contains("rewrite"));
+        }
+    }
+    @Test void unclassifiedTaskCannotAcquireModelInventedConditions() {
+        try (var f = new HarnessLifecycleTest.Fixture(); var prep = service(f, miss(), new Model() {
+            public Understanding understand(Input i, CallControl c) {
+                return Understanding.proceed(Map.of("video_id", 1001L), i.query());
+            }
+        })) {
+            RunState run = new RunState(new AccessScope("demo", "alice", Set.of(1001L)), "分析一下");
+            execute(f, prep, run, forbidden());
+            assertEquals(Status.NEEDS_INPUT, run.snapshot().status()); assertNull(run.task());
+        }
+    }
+
 }

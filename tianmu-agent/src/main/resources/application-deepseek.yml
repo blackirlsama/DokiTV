@@ -8,8 +8,7 @@ agent:
     preparation-max-tokens: 384
     harness-max-tokens: 1536
   preparation:
-    parallel-timeout: 10s
-    rewrite-timeout: 8s
+    understanding-timeout: 10s
     emotion-timeout: 3s
 harness:
   loop:

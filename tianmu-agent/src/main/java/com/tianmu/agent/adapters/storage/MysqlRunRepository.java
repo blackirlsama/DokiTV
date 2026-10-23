@@ -49,6 +49,7 @@ public final class MysqlRunRepository implements RunRepository, AutoCloseable {
         recoverInterrupted();
     }
     @Override public boolean durable() { return true; }
+    @Override public void verifyReady() { guard(); read(() -> db.queryForObject("SELECT 1", Integer.class)); }
     private AgentException unavailable() { return new AgentException("STORAGE_UNAVAILABLE", "Persistent storage is unavailable; retry using the same Idempotency-Key"); }
     private synchronized void guard() {
         try (PreparedStatement statement = writer.prepareStatement("SELECT IS_USED_LOCK(?) = CONNECTION_ID()")) {

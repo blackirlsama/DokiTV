@@ -1,6 +1,7 @@
 server:
   address: 127.0.0.1
   port: 8201
+  shutdown: graceful
 spring:
   application:
     name: Tianmu-operations-agent
@@ -11,11 +12,25 @@ spring:
       request-timeout: 60000
   jackson:
     time-zone: Asia/Shanghai
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,agentStorage
 agent:
   preparation:
     faq-timeout: 300ms
-    parallel-timeout: 2s
-    rewrite-timeout: 1500ms
+    understanding-timeout: 2s
     emotion-timeout: 300ms
 harness:
   loop:
