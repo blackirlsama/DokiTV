@@ -43,17 +43,7 @@ Tianmu 由两个独立部署、通过受控接口协作的系统组成：
 ## 系统全景
 
 ```mermaid
-flowchart LR
-    subgraph BIZ["① 视频业务后端"]
-        direction LR
-        WS["Netty WebSocket<br/>长连接接入"] --> MQ["RocketMQ<br/>推送 / 持久化"]
-        MQ --> DB[("MySQL<br/>弹幕与业务数据")]
-        DB --> Canal["Canal<br/>Binlog 订阅"]
-        Canal --> RDS[("Redis ZSet<br/>近期弹幕")]
-        DB --> Bridge["只读查询接口"]
-        RDS --> Bridge
-    end
-
+flowchart TB
     subgraph AGENT["② 运营 Agent"]
         direction TB
         API["接入层<br/>鉴权 · SSE"] --> Prep["问题准备<br/>FAQ · 澄清 · 改写"]
@@ -62,6 +52,16 @@ flowchart LR
         Tool --> Observe["结果回填"]
         Observe --> Decision
         Decision -->|回答| Deliver["统一交付<br/>口径 · 证据 · 终态"]
+    end
+
+    subgraph BIZ["① 视频业务后端"]
+        direction TB
+        WS["Netty WebSocket<br/>长连接接入"] --> MQ["RocketMQ<br/>推送 / 持久化"]
+        MQ --> DB[("MySQL<br/>弹幕与业务数据")]
+        DB --> Canal["Canal<br/>Binlog 订阅"]
+        Canal --> RDS[("Redis ZSet<br/>近期弹幕")]
+        DB --> Bridge["只读查询接口"]
+        RDS --> Bridge
     end
 
     Ops["运营人员"] --> API
