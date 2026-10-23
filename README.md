@@ -65,8 +65,7 @@ flowchart TB
     end
 
     Ops["运营人员"] --> API
-    Tool -- "只读查询" --> Bridge
-    Bridge -. "指标 · 数据时点" .-> Observe
+    Tool -- "只读查询 · 指标与时点回传" --> Bridge
 ```
 
 后端负责生产与实时分发，Agent 侧的决策—工具—回填构成循环；两者只通过只读查询交互，写入链路不经过 Agent。
