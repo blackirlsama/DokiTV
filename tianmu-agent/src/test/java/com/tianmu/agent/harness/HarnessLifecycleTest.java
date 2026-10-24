@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class HarnessLifecycleTest {
     static ToolDispatcher dispatcher(SkillCatalog skills, BusinessQueryPort queries, RuntimeHarness harness) {
-        var registry = new ToolRegistry(List.of(new ListSkillsTool(), new ReadSkillTool(), new ReadResultTool(), new QueryVideoMetricsTool(queries)), new ToolCatalog(), skills);
+        var registry = new ToolRegistry(List.of(new ListSkillsTool(), new ReadSkillTool(), new ReadResultTool(), new QueryDanmakuTool((q, s, c) -> { throw new AssertionError("Unexpected live query"); }), new CreateDanmakuReportTool(new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules()), new QueryVideoMetricsTool(queries)), new ToolCatalog(), skills);
         return new ToolDispatcher(skills, harness, registry);
     }
     static class Recording implements SpanExporter {

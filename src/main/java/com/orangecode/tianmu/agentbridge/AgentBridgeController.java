@@ -13,8 +13,9 @@ public final class AgentBridgeController {
     public record Resources(Set<Long> videoIds) {}
     private final BusinessAuthentication authentication;
     private final BusinessMetrics metrics;
-    public AgentBridgeController(BusinessAuthentication authentication, BusinessMetrics metrics) {
-        this.authentication = authentication; this.metrics = metrics;
+    private final BusinessDanmakuAnalysis analysis;
+    public AgentBridgeController(BusinessAuthentication authentication, BusinessMetrics metrics, BusinessDanmakuAnalysis analysis) {
+        this.authentication = authentication; this.metrics = metrics; this.analysis = analysis;
     }
     @GetMapping("/principal")
     public BusinessAuthentication.Principal principal(@RequestHeader(value="Authorization", required=false) String auth) {
@@ -34,5 +35,10 @@ public final class AgentBridgeController {
     @ExceptionHandler(BridgeException.class)
     public ResponseEntity<Map<String, String>> failure(BridgeException error) {
         return ResponseEntity.status(error.status()).body(Map.of("code", error.code(), "message", error.code()));
+    }
+    @GetMapping("/danmaku-analysis")
+    public BusinessDanmakuAnalysis.Dataset analyze(@RequestHeader(value="Authorization", required=false) String auth,
+            @RequestParam long videoId, @RequestParam java.time.LocalDateTime start, @RequestParam java.time.LocalDateTime end) {
+        return analysis.query(authentication.authenticate(auth), videoId, start, end);
     }
 }

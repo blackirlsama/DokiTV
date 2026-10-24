@@ -14,6 +14,10 @@ public interface RunRepository {
     default List<RunState> recoverQueued() { return List.of(); }
     default void refresh(RunState run) {}
     default boolean durable() { return false; }
+    default com.tianmu.agent.core.DanmakuTypes.ReportRef saveReport(UUID runId, AccessScope owner, String evidenceId, byte[] html) {
+        throw new com.tianmu.agent.core.AgentException("STORAGE_REQUIRED", "Report storage unavailable");
+    }
+    default byte[] report(UUID runId, AccessScope caller, String artifactId) { throw new com.tianmu.agent.core.AgentException("RESULT_NOT_FOUND", "Report not found"); }
     /** Read-only readiness check; durable adapters should verify their authority to accept writes. */
     default void verifyReady() {}
     /** Owner-only metadata used to authorize requested resources before loading their contents. */

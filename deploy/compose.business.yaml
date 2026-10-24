@@ -8,7 +8,17 @@ services:
       PREPARATION_MODEL: ${PREPARATION_MODEL:-deepseek-flash}
       HARNESS_MODEL: ${HARNESS_MODEL:-deepseek-v4-pro}
       DEEPSEEK_API_KEY_FILE: /run/secrets/model-api-key
-    secrets: [model-api-key]
+      AGENT_OBJECT_STORE: minio
+      AGENT_MINIO_URL: ${AGENT_MINIO_URL:?Configure the existing MinIO endpoint reachable from the Agent container}
+      AGENT_MINIO_BUCKET: ${AGENT_MINIO_BUCKET:-tianmu-agent-artifacts}
+      AGENT_MINIO_PREFIX: ${AGENT_MINIO_PREFIX:-agent-artifacts/}
+      AGENT_MINIO_ACCESS_KEY_FILE: /run/secrets/minio-access-key
+      AGENT_MINIO_SECRET_KEY_FILE: /run/secrets/minio-secret-key
+    secrets: [model-api-key, minio-access-key, minio-secret-key]
 secrets:
   model-api-key:
     file: ${TIANMU_SECRETS_DIR:?Initialize private runtime configuration}/model-api-key
+  minio-access-key:
+    file: ${TIANMU_SECRETS_DIR:?Initialize private runtime configuration}/minio-access-key
+  minio-secret-key:
+    file: ${TIANMU_SECRETS_DIR:?Initialize private runtime configuration}/minio-secret-key

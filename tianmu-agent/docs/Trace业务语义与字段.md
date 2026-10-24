@@ -13,10 +13,11 @@ Trace 用于解释一次提问经历了什么、为什么走该分支、在哪�
 | span.type | 触发时机 | 关键字段 |
 |---|---|---|
 | receive_query | 为新任务建立 HarnessSession，只发生一次 | input.char_count、身份与会话关联字段 |
-| pre_route | 完整预处理结束，已有真实路由结果 | request.route、route.reason、preparation.emotion、preparation.degraded_count |
+| pre_route | 完整预处理结束，已有真实路由结果 | request.route、route.reason、preparation.intent、preparation.emotion、preparation.degraded_count |
 | faq_lookup | FAQ 查找结束 | faq.hit、命中时的 faq.id / faq.version |
 | faq_direct | 命中 FAQ 后准备交付 | faq.hit、faq.id、faq.version |
 | emotion_recognition | 独立情绪分支完成 | preparation.emotion、模型名称和提供方 usage（若有） |
+| intent_recognition | FAQ 未命中后与理解、情绪并行识别 | preparation.intent、模型名称和提供方 usage（若有） |
 | query_understanding | 理解、澄清和改写候选生成 | model.decision=CLARIFY/PROCEED、query.rewritten（候选存在，不等于已采纳） |
 | memory_load | 从记忆仓储加载历史 | 耗时、operation.outcome、安全错误码 |
 | context_build | 任务组装或每轮上下文构建 | context.observation_count、agent.available_tools |
@@ -58,8 +59,46 @@ delivery.success 表示事件流已正常发送至关闭状态；发送成功的
 
 ## 安全、边界与待办
 
-默认不记录 userQuery、完整 llmContent、llmThinkingContent、原始工具参数/结果和最终 content，使用动作、标识、证据存在性与字符数。身份关联字段属于内部运维数据，后续查询接口必须继承租户与任务权限，不能只凭 traceId 放行。
+JSONL / Kafka 的 Span attributes 仍然只携带元数据和详情引用，消息正文不进入该导出流。输入、输出、模型服务响应和错误详情通过私有 ObjectStore 保存，读取接口继承任务当前用户、租户和视频权限。
+
+### 节点详情
+
+- `node.type`：REQUEST、MODEL、TOOL、SKILL、CONTEXT、ROUTING、LOOP、DELIVERY、HOOK、HTTP 或 STAGE。`span.type` 继续表示细分业务阶段，例如 intent_recognition。
+- `node.status`：RUNNING、SUCCEEDED、FAILED、TIMED_OUT、CANCELLED。与 OTel status 的 UNSET/ERROR 分开；UNSET 不直接当作成功。
+- `execution.attempt / retry_count`：实际工具尝试的序号与已发生重试数。模型当前没有隐式重试，固定为 1/0。每次工具尝试保留独立 Span。
+- `execution.timeout_ms / queue_ms / active_ms / wait_ms`：适配器调用预算、工作线程排队、实际执行和调用方等待。未执行到对应阶段时不伪造数值。Span 的总耗时仍包含 Hook 和详情采集等开销。
+- `tool.call_id` 使用本次工具 Span ID；`skill.name / version` 和私有输出快照包含实际加载的 Skill 内容。
+- `detail.{input,output,provider_output,error}_{ref,state,bytes,redacted}`：私有快照引用、采集状态、脱敏后原始字节数和是否脱敏。状态区分 COMPLETE、TRUNCATED、NOT_CAPTURED、DISABLED、CAPTURE_FAILED、LIMIT_REACHED。
+
+主循环的 MODEL_CONTEXT 是送给模型适配器的逻辑上下文。DeepSeekClient 会用实际序列化前的 MODEL_REQUEST（messages、参数，不含认证 Header）替换同节点 input 引用，并另存 MODEL_PROVIDER_RESPONSE；节点 output 是经过校验和变换后的业务 Decision。工具 input 是实际准入校验的参数，output 是最终准入结果。Hook Transform 自身保留前后快照和字节数，`context.changed` 表示该 Hook 是否改变内容。
+
+### 模型用量
+
+每个模型节点提供 `model.name / provider / temperature / max_tokens / streaming / message_count / finish_reason`（有可信来源时）。`model.input_tokens / output_tokens / total_tokens / cache_hit_tokens / cache_miss_tokens / reasoning_tokens` 只记录服务商实际返回的非负数值。
+
+`model.usage_state` 与请求级 `usage.state` 区分 NOT_REPORTED、PARTIAL、REPORTED、NOT_APPLICABLE；没有上报用量时不写 token 数值，避免把缺失当 0。请求合计按已报告的调用统计，结合 `usage.complete / reported_calls` 判断完整性。当前是非流式模型接口，`model.first_token_state=NOT_APPLICABLE`；`model.response_ms` 是完整响应耗时，不冒充 TTFT。
+
+不采集模型隐藏推理正文；服务商响应中的 reasoning_content 被规则遮盖。公开回答和结构化决策保存在对应输出快照中。
+
+### 存储与读取
+
+默认 `harness.trace.details.enabled=true`，单份快照上限 128 KiB、每个 Run 累计采集上限 8 MiB，可通过 HARNESS_TRACE_DETAILS_ENABLED、HARNESS_TRACE_DETAILS_MAX_BYTES、HARNESS_TRACE_DETAILS_MAX_RUN_BYTES 调整。超限保留明确的截断预览或限额状态。采集失败不改变业务执行结果。
+
+持久化环境复用已有 ObjectStore / MinIO 配置；Demo 使用 trace.directory/details 下的私有文件。每个引用包含 spanId、方向、字节数和 SHA-256，存储 Key 绑定 runId，读取时同时校验权限、大小和摘要。接口：
+
+`GET /api/agent/runs/{runId}/trace-payloads/{spanId}/{direction}/{bytes}/{sha}`
+
+密码、API Key、authorizationRef、Bearer 凭证、手机号和邮箱按规则遮盖；规则脱敏不保证发现任意正文中的全部敏感信息。快照对象的保留期需要由部署环境的私有存储生命周期管理；JSONL 的滚动归档不自动删除对象存储内的快照。
+
+本地复现与查看（PowerShell）：
+
+```powershell
+python scripts/smoke_demo.py --jar tianmu-agent/target/operations-agent-0.7.0-SNAPSHOT.jar --artifacts var/trace-demo
+python scripts/render_trace.py --trace var/trace-demo/spans.jsonl --details var/trace-demo/details --output var/demo-trace-call-tree.html
+```
+
+导出的 HTML 包含经过脱敏的输入输出详情，按与快照相同的授权范围使用。页面支持节点展开、开始/结束时间、耗时、Token、错误、输入输出和原始元数据查看。
 
 生命周期由 HarnessSession 的终态 CAS 和执行计数控制，排队取消、错误与正常提前返回均有唯一 finish。进程被强杀时未结束 Span 无法由 outbox 恢复；晚到、未响应取消的适配器也可能在 finish 后产生记录，因此 finish 不是“所有记录已经到齐”的证明。
 
-现有同步刷盘、容量上限、失败重试、eventId 去重契约保持不变。本次不实现 Kafka Consumer、查询存储/UI、跨服务 HTTP 注入、动态采样或内容捕获开关；服务器当前部署版本也不会被本地修改自动替换。
+现有同步刷盘、容量上限、失败重试、eventId 去重契约保持不变。Kafka Consumer、在线 Trace 列表查询、跨服务 HTTP 注入、动态采样仍待建设；本地修改需部署后才能用于服务器流量。

@@ -8,6 +8,7 @@ agent:
     preparation-max-tokens: 384
     harness-max-tokens: 1536
   preparation:
+    intent-timeout: 10s
     understanding-timeout: 10s
     emotion-timeout: 3s
 harness:

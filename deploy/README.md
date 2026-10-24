@@ -71,7 +71,7 @@ curl -f http://127.0.0.1:18201/actuator/health/readiness
 ```
 
 - **Liveness** 仅反映应用存活，不因外部依赖故障触发重启风暴。
-- **Readiness** 检查应用就绪、MySQL 写实例锁与查询连接，以及私有对象目录的实际写入 / 清理能力。
+- **Readiness** 检查应用就绪、MySQL 写实例锁与查询连接，以及所选私有对象存储的实际写入 / 读取校验 / 清理能力。staging显式使用文件，business使用既有MinIO。
 - Redis 可回源 MySQL，Trace 故障也允许降级，因此不作为存活或就绪的硬依赖。
 - 探针匿名响应仅提供状态，不包含凭据、异常正文或文件路径。只暴露 health，不开放 env、heapdump 等管理端点。
 
@@ -87,7 +87,7 @@ ssh -N -L 18201:127.0.0.1:18201 USER@SERVER
 
 ## 6. 显式切换真实业务模式
 
-先完成业务桥接、正式账号和数据口径验收，在 `runtime.env` 中配置 `BUSINESS_BASE_URL=https://...`。将模型 Key 放在私有 `secrets/model-api-key` 文件，设置与其他凭据相同的所有者和权限，再构建：
+先完成业务桥接、正式账号和数据口径验收，在 `runtime.env` 中配置 `BUSINESS_BASE_URL=https://...` 和容器能访问的既有 `AGENT_MINIO_URL`。私有bucket默认 `tianmu-agent-artifacts`，可选配置 `AGENT_MINIO_BUCKET` / `AGENT_MINIO_PREFIX`。将模型Key放在私有 `secrets/model-api-key`，既有MinIO凭据分别放在 `secrets/minio-access-key` 与 `secrets/minio-secret-key`，设置与其他凭据相同的所有者和权限，再构建：
 
 ```sh
 sudo python3 deploy/manage.py build --business --env /opt/tianmu-staging/config/runtime.env
@@ -95,6 +95,8 @@ sudo python3 deploy/manage.py up --env /opt/tianmu-staging/config/releases/NEW_R
 ```
 
 真实业务模式使用 `business,deepseek,persistent`，不会回退 Demo。此时 `verify` 只检查存活和就绪，不冒用 Demo 身份，也不自动发出收费模型查询。正式登录与业务查询需要使用授权账号另行验收。
+
+报告和证据对象写入同一MinIO实例的私有bucket，业务部署不会新建MinIO服务。已有staging文件对象切换前按[存储迁移要求](../tianmu-agent/docs/持久化存储接入.md)复制并核对，未迁移时继续使用原staging配置。
 
 本方案先解决环境复现与部署边界；备份恢复、业务指标水位、生产限流、告警、完整压力测试与多实例属于后续生产化工作。
 

@@ -21,4 +21,5 @@ public class AgentBridgeConfiguration {
         return new BusinessAuthentication(new JdbcTemplate(reader.source()), redis, properties);
     }
     @Bean BusinessMetrics businessMetrics(BusinessReadDatabase reader, BridgeProperties properties) { return new BusinessMetrics(new JdbcTemplate(reader.source()), properties); }
+    @Bean BusinessDanmakuAnalysis businessDanmakuAnalysis(BusinessReadDatabase reader, BridgeProperties properties) { return new BusinessDanmakuAnalysis(new JdbcTemplate(reader.source()), properties); }
 }

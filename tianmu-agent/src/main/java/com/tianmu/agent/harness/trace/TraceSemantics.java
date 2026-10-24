@@ -26,10 +26,13 @@ public final class TraceSemantics {
                 case FAQ -> "FAQ_HIT"; case CLARIFY -> "CLARIFICATION_REQUIRED"; case HARNESS -> "READY";
             });
             attrs.put("preparation.emotion", prepared.request().emotion().name());
+            attrs.put("preparation.intent", prepared.request().intent().name());
             attrs.put("preparation.degraded_count", prepared.request().degradedStages().size());
             if (prepared.faq() != null) attrs.putAll(faq(prepared.faq()));
         } else if (value instanceof Emotion emotion) {
             attrs.put("preparation.emotion", emotion.name());
+        } else if (value instanceof Intent intent) {
+            attrs.put("preparation.intent", intent.name());
         } else if (value instanceof Understanding understood) {
             attrs.put("model.decision", understood.needsClarification() ? "CLARIFY" : "PROCEED");
             attrs.put("query.rewritten", understood.rewrittenQuery() != null);

@@ -26,14 +26,17 @@ public class HarnessHttpTraceFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         Context parent = W3CTraceContextPropagator.getInstance().extract(Context.root(), request, getter);
         Span span = tracer.spanBuilder("http.agent").setSpanKind(SpanKind.SERVER).setParent(parent).startSpan();
+        TraceNode.begin(span, "http.agent");
         TraceAttributes.apply(span, Map.of("http.method", request.getMethod(), "http.route", "/api/agent/runs"));
         response.setHeader("X-Trace-ID", span.getSpanContext().getTraceId());
         try (Scope scope = span.makeCurrent(); TraceLogScope mdc = new TraceLogScope(span, null)) {
             chain.doFilter(request, response);
             span.setAttribute("http.status_code", response.getStatus());
             if (response.getStatus() >= 400) span.setStatus(StatusCode.ERROR);
+            TraceAttributes.apply(span, Map.of("node.status", response.getStatus() >= 400 ? "FAILED" : "SUCCEEDED"));
         } catch (ServletException | IOException | RuntimeException e) {
             span.setStatus(StatusCode.ERROR);
+            TraceAttributes.apply(span, Map.of("node.status", "FAILED"));
             throw e;
         } finally { span.end(); }
     }

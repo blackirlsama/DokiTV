@@ -101,18 +101,19 @@ class EntryArchitectureTest {
         }
     }
     @Test void preparationAndLoopShareOneModelCallBudget() {
-        var limits = new LoopPolicy(6, Duration.ofSeconds(5), Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(1), 3, true, 3);
-        CyclicBarrier started = new CyclicBarrier(2);
+        var limits = new LoopPolicy(6, Duration.ofSeconds(5), Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(1), 3, true, 4);
+        CyclicBarrier started = new CyclicBarrier(3);
         try (var f = new LoopControlTest.Fixture(limits); var prep = new PreparationService((i, c) -> Optional.empty(), new PreparationFlowTest.Model() {
             void meet() { try { started.await(1, TimeUnit.SECONDS); } catch (Exception e) { throw new IllegalStateException(e); } }
             public Emotion emotion(Input i, CallControl c) { meet(); return Emotion.NEUTRAL; }
+            public Intent intent(Input i, CallControl c) { meet(); return super.intent(i, c); }
             public Understanding understand(Input i, CallControl c) { meet(); return accepted(i, i.query()); }
         }, policy(), f.harness)) {
             RunState run = f.run(); AtomicInteger main = new AtomicInteger();
             var runtime = new AgentRuntime(c -> { main.incrementAndGet(); return Decision.tool("list_skills", Map.of()); }, f.tools, f.harness);
             new RequestOrchestrator(prep, runtime, f.harness).execute(run);
             assertEquals("MODEL_CALL_BUDGET_EXCEEDED", run.snapshot().errorCode());
-            assertEquals(2, run.snapshot().preparationCalls()); assertEquals(3, run.snapshot().totalModelCalls()); assertEquals(1, main.get());
+            assertEquals(3, run.snapshot().preparationCalls()); assertEquals(4, run.snapshot().totalModelCalls()); assertEquals(1, main.get());
         }
     }
     @Test void preparedTaskFreezesBusinessDateConditionsAndResourceVersions() {
@@ -146,7 +147,7 @@ class EntryArchitectureTest {
                 public String name() { return "list_skills"; } public boolean requiresSkill() { return false; }
                 public ToolResult execute(ToolCall call, ToolContext context) { context.activateSkill("video-metrics"); return null; }
             };
-            var registry = new ToolRegistry(List.of(misuse, new ReadSkillTool(), new ReadResultTool(), new QueryVideoMetricsTool((q, s) -> null)), new ToolCatalog(), skills);
+            var registry = new ToolRegistry(List.of(misuse, new ReadSkillTool(), new ReadResultTool(), new QueryDanmakuTool((q, s, c) -> { throw new AssertionError("Unexpected live query"); }), new CreateDanmakuReportTool(new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules()), new QueryVideoMetricsTool((q, s) -> null)), new ToolCatalog(), skills);
             var dispatcher = new ToolDispatcher(skills, f.harness, registry); RunState run = f.run(); run.start();
             assertEquals("TOOL_CAPABILITY_DENIED", assertThrows(AgentException.class, () -> dispatcher.execute(new ToolCall("list_skills", Map.of()), run)).code());
             assertTrue(run.execution().activeSkills().isEmpty()); run.cancel();

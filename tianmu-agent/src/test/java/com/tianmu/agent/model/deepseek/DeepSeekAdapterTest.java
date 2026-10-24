@@ -25,6 +25,7 @@ class DeepSeekAdapterTest {
     DeepSeekClient client;
     final List<JsonNode> requests = new CopyOnWriteArrayList<>();
     final List<String> auth = new CopyOnWriteArrayList<>();
+    @org.junit.jupiter.api.io.TempDir java.nio.file.Path detailDirectory;
     Function<JsonNode, String> answer = input -> "{\"kind\":\"CLARIFY\",\"clarification\":\"Date?\"}";
     int status = 200;
     CountDownLatch entered, release;
@@ -49,6 +50,32 @@ class DeepSeekAdapterTest {
     CallControl control() { return new CallControl(Instant.now().plusSeconds(2), new CancellationToken()); }
     Input input() { return new Input("视频1001昨天的弹幕数", LocalDate.of(2026, 10, 21), new AccessScope("private-tenant", "private-user", Set.of(1001L))); }
     ModelContext context() { return new ModelContext(input().query(), input().businessDate(), input().scope(), Set.of(), List.of(), List.of(), 6); }
+    @Test void modelTraceCapturesActualMessagesProviderResponseAndReportedUsageWithoutCredentials() throws Exception {
+        var exported = new CopyOnWriteArrayList<io.opentelemetry.sdk.trace.data.SpanData>();
+        var exporter = new io.opentelemetry.sdk.trace.export.SpanExporter() {
+            public io.opentelemetry.sdk.common.CompletableResultCode export(Collection<io.opentelemetry.sdk.trace.data.SpanData> spans) { exported.addAll(spans); return flush(); }
+            public io.opentelemetry.sdk.common.CompletableResultCode flush() { return io.opentelemetry.sdk.common.CompletableResultCode.ofSuccess(); }
+            public io.opentelemetry.sdk.common.CompletableResultCode shutdown() { return flush(); }
+        };
+        var details = new com.tianmu.agent.harness.trace.TraceDetails(new com.tianmu.agent.adapters.storage.FileObjectStore(detailDirectory), mapper, 131072, true);
+        UUID run = UUID.randomUUID();
+        try (var provider = io.opentelemetry.sdk.trace.SdkTracerProvider.builder().addSpanProcessor(io.opentelemetry.sdk.trace.export.SimpleSpanProcessor.create(exporter)).build()) {
+            var span = provider.get("test").spanBuilder("agent.model").startSpan();
+            try (var scope = details.bind(io.opentelemetry.context.Context.root().with(span), run).makeCurrent()) {
+                new DeepSeekAdapters().deepSeekHarnessModel(client, properties, mapper, new PromptCatalog()).decide(context(), control());
+            } finally { span.end(); }
+            var attributes = exported.get(0).getAttributes();
+            assertEquals(15L, attributes.get(io.opentelemetry.api.common.AttributeKey.longKey("model.total_tokens")));
+            assertEquals("stop", attributes.get(io.opentelemetry.api.common.AttributeKey.stringKey("model.finish_reason")));
+            assertEquals("NOT_APPLICABLE", attributes.get(io.opentelemetry.api.common.AttributeKey.stringKey("model.first_token_state")));
+            for (String direction : List.of("input", "provider_output")) {
+                String[] ref = attributes.get(io.opentelemetry.api.common.AttributeKey.stringKey("detail." + direction + "_ref")).split("/");
+                String body = new String(details.read(run, ref[0], ref[1], Long.parseLong(ref[2]), ref[3]), StandardCharsets.UTF_8);
+                assertFalse(body.contains("test-secret"));
+                assertEquals(direction.equals("input") ? "MODEL_REQUEST" : "MODEL_PROVIDER_RESPONSE", mapper.readTree(body).path("kind").asText());
+            }
+        }
+    }
     @Test void oneKeySelectsTwoModelsAndDoesNotSendIdentityScope() {
         answer = request -> request.path("model").asText().equals("deepseek-flash") ? "{\"emotion\":\"NEUTRAL\"}"
                 : "{\"kind\":\"CLARIFY\",\"clarification\":\"Date?\"}";
@@ -94,6 +121,27 @@ class DeepSeekAdapterTest {
             assertThrows(IllegalArgumentException.class, () -> port.understand(input(), control()));
         }
     }
+    @Test void intentUsesIndependentStructuredModelRequestAndRejectsUnknownFields() {
+        var port = new DeepSeekAdapters().deepSeekPreparation(client, properties, mapper, new PromptCatalog());
+        answer = request -> "{\"intent\":\"VIDEO_METRIC\"}";
+        assertEquals(Intent.VIDEO_METRIC, port.intent(input(), control()));
+        assertEquals(properties.preparationModel(), requests.get(0).path("model").asText());
+        assertFalse(requests.get(0).toString().contains("private-tenant"));
+        assertFalse(requests.get(0).toString().contains("private-user"));
+        for (String invalid : List.of("{\"intent\":\"ADMIN\"}", "{\"intent\":\"OTHER\",\"extra\":true}", "{\"intent\":7}")) {
+            answer = request -> invalid;
+            assertThrows(IllegalArgumentException.class, () -> port.intent(input(), control()));
+        }
+    }
+
+    @Test void persistedPreparationWithoutIntentRemainsReadable() throws Exception {
+        PreparedRequest old = mapper.readValue("""
+                {"originalQuery":"q","query":"q","emotion":"UNKNOWN","degradedStages":[],"skippedStages":[]}
+                """, PreparedRequest.class);
+        assertEquals(Intent.UNKNOWN, old.intent());
+        assertEquals("q", old.query());
+    }
+
     @Test void invalidDecisionAndProviderAuthFailureAreDistinctAndSanitized() {
         var port = new DeepSeekAdapters().deepSeekHarnessModel(client, properties, mapper, new PromptCatalog());
         answer = request -> "{\"kind\":\"ANSWER\",\"answer\":{\"text\":\"unsupported\",\"evidenceIds\":[3]}}";

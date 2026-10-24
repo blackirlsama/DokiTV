@@ -25,7 +25,8 @@ class DeploymentContract(unittest.TestCase):
         self.assertEqual('unbuilt', values['TIANMU_IMAGE_TAG'])
 
     def test_secret_literals_and_shell_execution_settings_are_rejected(self):
-        for line in ['AGENT_DB_PASSWORD=private', 'PATH=/tmp', 'DEEPSEEK_API_KEY=private']:
+        for line in ['AGENT_DB_PASSWORD=private', 'PATH=/tmp', 'DEEPSEEK_API_KEY=private',
+                     'AGENT_MINIO_ACCESS_KEY=private', 'AGENT_MINIO_SECRET_KEY=private']:
             file = self.root / 'runtime.env'
             file.write_text(line)
             with self.assertRaises(RuntimeError):

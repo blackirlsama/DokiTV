@@ -50,6 +50,7 @@ public class SseEventStreams implements AutoCloseable {
         Subscription(RunState run, long cursor, SseEmitter emitter) {
             this.store = run.events(); this.cursor = cursor; this.emitter = emitter; this.createdAt = run.createdAt;
             span = tracer.spanBuilder(SpanType.TERMINAL_DELIVERY.value()).startSpan();
+            TraceNode.begin(span, SpanType.TERMINAL_DELIVERY.value());
             TraceAttributes.apply(span, TraceSemantics.identity(run));
             TraceAttributes.apply(span, Map.of("span.type", SpanType.TERMINAL_DELIVERY.value(), "delivery.type", "SSE",
                     "delivery.replay", cursor > 0 || com.tianmu.agent.core.AgentTypes.terminal(run.snapshot().status())));
@@ -91,6 +92,7 @@ public class SseEventStreams implements AutoCloseable {
         void stop() {
             if (!stopped.compareAndSet(false, true)) return;
             TraceAttributes.apply(span, Map.of("delivery.success", complete));
+            TraceAttributes.apply(span, Map.of("node.status", complete ? "SUCCEEDED" : "CANCELLED"));
             if (!complete) span.setStatus(StatusCode.ERROR);
             span.end();
             if (registration != null) registration.close();

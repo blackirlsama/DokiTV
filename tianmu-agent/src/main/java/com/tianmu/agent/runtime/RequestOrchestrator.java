@@ -31,15 +31,24 @@ public class RequestOrchestrator {
             harness.execute(run, () -> {
                 if (!run.start()) return;
                 String input = harness.stage(run, "agent.input", null, null, Map.of(),
-                        () -> harness.transform(run, TransformPoint.INPUT, run.query()));
+                        () -> {
+                            com.tianmu.agent.harness.trace.TraceDetails.input(run.query());
+                            return harness.transform(run, TransformPoint.INPUT, run.query());
+                        });
                 harness.stage(run, "agent.route", HookPoint.PRE_ROUTE, null, Map.of(), () -> true);
-                Result result = harness.stage(run, "agent.preparation", null, null, Map.of(), () -> preparation.prepare(run, input));
+                Result result = harness.stage(run, "agent.preparation", null, null, Map.of(), () -> {
+                    com.tianmu.agent.harness.trace.TraceDetails.input(input);
+                    return preparation.prepare(run, input);
+                });
                 run.prepared(result);
                 switch (result.route()) {
                     case FAQ -> delivery.faq(run, result.faq());
                     case CLARIFY -> delivery.clarification(run, result.clarification());
                     case HARNESS -> {
-                        var task = harness.stage(run, "agent.assemble", null, null, Map.of(), () -> assembler.assemble(run));
+                        var task = harness.stage(run, "agent.assemble", null, null, Map.of(), () -> {
+                            com.tianmu.agent.harness.trace.TraceDetails.input(Map.of("preparation", result, "memory", run.memory()));
+                            return assembler.assemble(run);
+                        });
                         run.task(task); runtime.runPrepared(run, task);
                     }
                 }

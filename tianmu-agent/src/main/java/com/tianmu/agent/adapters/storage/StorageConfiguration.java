@@ -8,7 +8,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.*;
 import org.springframework.scheduling.annotation.EnableScheduling;
-import java.nio.file.Path;
 import java.time.Duration;
 
 @Configuration
@@ -36,11 +35,6 @@ public class StorageConfiguration {
             @Value("${agent.storage.redis.host:127.0.0.1}") String host, @Value("${agent.storage.redis.port:6379}") int port,
             @Value("${agent.storage.redis.password:}") String password) {
         return new RedisMemoryCache(mapper, enabled, host, port, password);
-    }
-    @Bean @ConditionalOnProperty(name="agent.storage.mode", havingValue="mysql")
-    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(com.tianmu.agent.runtime.store.ObjectStore.class)
-    FileObjectStore privateObjects(@Value("${agent.storage.object-directory:./var/artifacts}") String directory) {
-        return new FileObjectStore(Path.of(directory));
     }
     @Bean(destroyMethod="close") @ConditionalOnProperty(name="agent.storage.mode", havingValue="mysql")
     MysqlRunRepository persistentRuns(HikariDataSource source, Flyway migrations, ObjectMapper mapper,

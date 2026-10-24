@@ -19,11 +19,14 @@ public class RuntimeHarness implements AutoCloseable {
     private final TransformDispatcher transforms;
     private final LoopControl loopControl;
     private final boolean ownsLoopControl;
+    private TraceDetails traceDetails;
     private final Map<UUID, HarnessSession> sessions = new java.util.concurrent.ConcurrentHashMap<>();
     @org.springframework.beans.factory.annotation.Autowired
-    public RuntimeHarness(Tracer tracer, HookDispatcher hooks, TransformDispatcher transforms, LoopControl control) {
+    public RuntimeHarness(Tracer tracer, HookDispatcher hooks, TransformDispatcher transforms, LoopControl control, TraceDetails details) {
         this(tracer, hooks, transforms, control, false);
+        this.traceDetails = details;
     }
+    public RuntimeHarness(Tracer tracer, HookDispatcher hooks, TransformDispatcher transforms, LoopControl control) { this(tracer, hooks, transforms, control, false); }
     public RuntimeHarness(Tracer tracer, HookDispatcher hooks, TransformDispatcher transforms) {
         this(tracer, hooks, transforms, new LoopControl(LoopPolicy.defaults()), true);
     }
@@ -41,7 +44,7 @@ public class RuntimeHarness implements AutoCloseable {
                 run.snapshot().steps()), run::checkpoint);
     }
     public HarnessSession start(RunState run) {
-        HarnessSession session = sessions.computeIfAbsent(run.id, id -> new HarnessSession(run, tracer, hooks));
+        HarnessSession session = sessions.computeIfAbsent(run.id, id -> new HarnessSession(run, tracer, hooks, traceDetails));
         run.traceId(session.traceId());
         loopControl.arm(run);
         session.begin();
@@ -68,6 +71,7 @@ public class RuntimeHarness implements AutoCloseable {
         Context parent = Span.current().getSpanContext().getTraceId().equals(session.traceId())
                 ? Context.current() : session.context();
         Span span = tracer.spanBuilder(name).setParent(parent).startSpan();
+        TraceNode.begin(span, name);
         TraceAttributes.apply(span, attributes);
         TraceAttributes.apply(span, TraceSemantics.identity(run));
         SpanType type = SpanType.forStage(name);
@@ -84,10 +88,13 @@ public class RuntimeHarness implements AutoCloseable {
                 run.checkpoint();
                 executed = true;
                 T value = operation.get();
+                TraceDetails.output(value);
+                TraceNode.success(span);
                 if (!(value instanceof Optional<?>) || type == SpanType.FAQ_LOOKUP)
                     resultAttributes.putAll(TraceSemantics.result(value));
                 return value;
             } catch (RuntimeException e) {
+                TraceNode.failure(span, e);
                 outcome = "error";
                 error = e instanceof AgentException agent ? agent.code() : "INTERNAL_ERROR";
                 span.setStatus(StatusCode.ERROR);

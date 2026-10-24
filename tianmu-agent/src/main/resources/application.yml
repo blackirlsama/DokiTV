@@ -50,6 +50,10 @@ harness:
     max-record-bytes: 65536
     archive-max-bytes: 5242880
     archive-backups: 3
+    details:
+      enabled: ${HARNESS_TRACE_DETAILS_ENABLED:true}
+      max-bytes: ${HARNESS_TRACE_DETAILS_MAX_BYTES:131072}
+      max-run-bytes: ${HARNESS_TRACE_DETAILS_MAX_RUN_BYTES:8388608}
     kafka:
       bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:}
       topic: ${KAFKA_TRACE_TOPIC:Tianmu.agent.trace.v1}

@@ -32,6 +32,14 @@ class BusinessAdapterTest {
                 JsonNode body=mapper.readTree(exchange.getRequestBody()); Set<Long> result=new HashSet<>();
                 for(var id:body.path("videoIds")) if(allowed.contains(id.longValue())) result.add(id.longValue());
                 value=Map.of("videoIds",result);
+            } else if(path.endsWith("danmaku-analysis")) {
+                status=metricStatus;
+                String query=exchange.getRequestURI().getRawQuery();
+                Map<String,String> params=new HashMap<>();
+                for(String entry:query.split("&")) {String[] pair=entry.split("=",2);params.put(pair[0],URLDecoder.decode(pair[1],java.nio.charset.StandardCharsets.UTF_8));}
+                var q=new com.tianmu.agent.core.DanmakuTypes.Query(Long.parseLong(params.get("videoId")),LocalDateTime.parse(params.get("start")),LocalDateTime.parse(params.get("end")));
+                var bins=new ArrayList<com.tianmu.agent.core.DanmakuTypes.Bucket>();for(int i=0;i<12;i++)bins.add(new com.tianmu.agent.core.DanmakuTypes.Bucket(i,0));
+                value=new com.tianmu.agent.core.DanmakuTypes.Dataset(q,0,0,bins,List.of(),Instant.now(),"fixture",false);
             } else {
                 status=metricStatus;
                 value=new MetricData(1001,LocalDate.now().minusDays(1),"bullet_count",3,"bullet-retained-created-v1",
@@ -52,6 +60,21 @@ class BusinessAdapterTest {
     }
     @Test void forbiddenTargetStopsBeforeRunCreation(){
         assertEquals("FORBIDDEN",assertThrows(AgentException.class,()->adapter.forCreate("token","查询视频1002昨天的弹幕数",null)).code());
+    }
+    @Test void videoAndRoomAliasesUseTheSameAuthorizationBoundary() {
+        for (String target : List.of("视频1001", "直播间1001", "视频ID：1001", "videoId=1001", "video_id:1001"))
+            assertEquals(Set.of(1001L), adapter.forCreate("token", "分析" + target + "昨天的弹幕", null).videoIds());
+        assertEquals("FORBIDDEN", assertThrows(AgentException.class, () -> adapter.forCreate("token", "查询videoId=1002昨天的弹幕数", null)).code());
+    }
+    @Test void liveRoomAliasIsAuthorizedAndAnalysisUsesRevalidatedCredential() {
+        var scope=adapter.forCreate("token","分析直播间1001昨天的弹幕报告",null);
+        assertEquals(Set.of(1001L),scope.videoIds());
+        var day=LocalDate.now(com.tianmu.agent.core.DanmakuTypes.ZONE).minusDays(1);
+        var q=new com.tianmu.agent.core.DanmakuTypes.Query(1001,day.atStartOfDay(),day.plusDays(1).atStartOfDay());
+        var result=adapter.query(q,scope,new CallControl(Instant.now().plusSeconds(5),new CancellationToken()));
+        assertEquals(q,result.query());assertEquals(0,result.totalMessages());
+        metricStatus=403;
+        assertEquals("FORBIDDEN",assertThrows(AgentException.class,()->adapter.query(q,scope,new CallControl(Instant.now().plusSeconds(5),new CancellationToken()))).code());
     }
     @Test void runAndClarificationUseOwnerCheckedMetadata(){
         UUID id=UUID.randomUUID(); when(repository.resourcesForRun(eq(id),any())).thenReturn(Set.of(1001L));

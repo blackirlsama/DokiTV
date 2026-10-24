@@ -1,6 +1,7 @@
 package com.tianmu.agent.preparation;
 
 import com.tianmu.agent.core.TaskTypes.Specification;
+import com.tianmu.agent.core.DanmakuTarget;
 import org.springframework.stereotype.Component;
 import java.time.*;
 import java.util.*;
@@ -9,7 +10,8 @@ import java.util.regex.Pattern;
 @Component
 public class MetricTaskSpecificationResolver implements TaskSpecificationResolver {
     public Optional<Specification> resolve(String original, LocalDate businessDate) {
-        var ids = Pattern.compile("视频\\s*(\\d+)").matcher(original).results().map(m -> m.group(1)).toList();
+        if (DanmakuReportTask.requested(original)) return Optional.empty();
+        var ids = DanmakuTarget.matcher(original).results().map(m -> m.group(1)).toList();
         var dates = Pattern.compile("\\d{4}-\\d{2}-\\d{2}").matcher(original).results().map(m -> m.group()).toList();
         if (original.contains("弹幕") && ids.size() == 1 && (dates.size() == 1 || dates.isEmpty() && original.contains("昨天"))) {
             try {

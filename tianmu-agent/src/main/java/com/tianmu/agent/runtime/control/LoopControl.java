@@ -28,8 +28,16 @@ public final class LoopControl implements AutoCloseable {
         arm(run);
         run.checkpoint();
         Instant localDeadline = Instant.now().plus(timeout);
+        long submittedAt = System.nanoTime();
+        io.opentelemetry.api.trace.Span observedSpan = io.opentelemetry.api.trace.Span.current();
+        com.tianmu.agent.harness.trace.TraceAttributes.apply(observedSpan, java.util.Map.of("execution.timeout_ms", Math.max(0, Math.min(timeout.toMillis(), Duration.between(Instant.now(), run.deadline()).toMillis()))));
         CallControl control = new CallControl(localDeadline.isBefore(run.deadline()) ? localDeadline : run.deadline(), new CancellationToken());
-        FutureTask<T> task = new FutureTask<>(() -> operation.apply(control));
+        FutureTask<T> task = new FutureTask<>(() -> {
+            long activeAt = System.nanoTime();
+            com.tianmu.agent.harness.trace.TraceAttributes.apply(observedSpan, java.util.Map.of("execution.queue_ms", Math.max(0, (activeAt - submittedAt) / 1_000_000)));
+            try { return operation.apply(control); }
+            finally { com.tianmu.agent.harness.trace.TraceAttributes.apply(observedSpan, java.util.Map.of("execution.active_ms", Math.max(0, (System.nanoTime() - activeAt) / 1_000_000))); }
+        });
         try (var registration = run.cancellation().onCancel(() -> {
             control.cancellation().cancel(run.cancellation().reason()); task.cancel(true);
         })) {
@@ -58,7 +66,7 @@ public final class LoopControl implements AutoCloseable {
                 if (e.getCause() instanceof AgentException domain) throw domain;
                 throw new AgentException(failureCode, "Adapter call failed");
             }
-        }
+        } finally { com.tianmu.agent.harness.trace.TraceAttributes.apply(observedSpan, java.util.Map.of("execution.wait_ms", Math.max(0, (System.nanoTime() - submittedAt) / 1_000_000))); }
     }
     @Override public void close() { timer.shutdownNow(); calls.shutdownNow(); }
 }

@@ -21,12 +21,16 @@ java -jar tianmu-agent/target/operations-agent-0.7.0-SNAPSHOT.jar
 flowchart TD
     A["API / RunService：认证、会话、幂等与入队"]
     A --> B["RequestOrchestrator：协调请求"]
-    B --> C["PreparationService：FAQ 与前置规则"]
+    B --> C["PreparationService：FAQ 与三路识别"]
     C -->|FAQ / 澄清| F["DeliveryService：统一交付"]
     C -->|继续| U["问题理解：澄清 + 条件提取 + 改写"]
+    C -->|并行关键分支| I["意图识别"]
     C -->|并行旁路| M["情绪识别：非阻塞"]
     U -->|需澄清| F
-    U -->|条件通过校验| D["TaskAssembler：固定 PreparedTask"]
+    U --> V["服务端意图、条件与规则校验"]
+    I --> V
+    V -->|条件通过| D["TaskAssembler：固定 PreparedTask"]
+    V -->|需澄清| F
     M -.已就绪则使用.-> D
     D --> E["AgentRuntime：模型决策与工具循环"]
     E --> F
@@ -36,7 +40,7 @@ flowchart TD
 | 目录 | 职责与约束 |
 | --- | --- |
 | `api/` | HTTP / SSE，接口与鉴权接入 |
-| `preparation/` | FAQ、前置规则、一次问题理解与并行情绪分析 |
+| `preparation/` | FAQ 优先短路，意图、问题理解和情绪三路并行，服务端汇合校验 |
 | `application/` | 任务组装、受限历史视图、统一交付 |
 | `runtime/` | 请求编排、循环、状态与调度；`control/` 负责超时、取消和终态竞争 |
 | `harness/` | Hook、Transform 与 Trace |
@@ -46,7 +50,7 @@ flowchart TD
 | `adapters/`、`demo/` | 外部系统适配与本地模拟实现 |
 | `core/`、`resource/` | 共享契约与有界资源读取 |
 
-理解调用超时或候选条件与服务端解析冲突时追问；仅改写无效时回到原文。情绪只取已就绪结果。模型提取的条件不直接作为授权或执行条件。
+意图未知、关键识别超时或候选条件与服务端解析冲突时追问；仅改写无效时回到原文。情绪只取已就绪结果。三路独立调用均计入总预算，模型意图和提取的条件不直接作为授权或执行条件。
 
 业务 SQL 位于根工程的 `agentbridge/`，模型协议位于模型适配器。模型返回决策，Runtime 执行工具；工具不能直接控制终态或发送 SSE。
 
@@ -74,10 +78,11 @@ Hook 分为观察与执行前拦截：Observer 失败隔离，Gate 失败关闭�
 ## 数据与恢复约定
 
 - MySQL 是正式记录的权威来源，终态及关联交付记录在同一事务提交。
-- Redis 保存可重建的授权历史视图；完整结果放在私有对象目录。
+- Redis 保存可重建的授权历史视图；persistent的完整结果与HTML报告默认放在既有MinIO的私有bucket，复用TIANMU_MINIO_*配置。
 - Trace 使用独立的本地文件 Outbox，异步投递 JSONL / Kafka；与存储 Outbox 分开。
 - 持久化仅支持单写实例。重启可查询已完成任务、恢复符合条件的排队任务；在执行任务结束为 `RUNNER_LOST`。
 - 当前业务指标是指定日期内已入库且仍保留的弹幕数，不代表完整发送总量。
+- 弹幕分析报告按相同videoId和权限读取准确统计与最多48条片段；视频和直播间使用同一套弹幕能力。
 
 ## 验证与进一步阅读
 
@@ -94,5 +99,6 @@ git diff --check
 - [入口与并行预处理](docs/统一入口与并行预处理.md)：顺序、汇合、降级和取消。
 - [持久化存储接入](docs/持久化存储接入.md)：配置、事务、恢复与删除。
 - [P0 业务接入](docs/P0业务接入.md)：身份、授权、指标口径和 SQL 对账。
+- [弹幕分析报告](docs/弹幕分析报告.md)：统一videoId、Tool/Skill、统计与样例口径、私有HTML交付。
 - [部署说明](../docs/DEPLOYMENT.md)：profiles 与环境变量。
 - [路线图](../docs/ROADMAP.md)：尚未实现的能力与后续方向。

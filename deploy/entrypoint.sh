@@ -14,4 +14,6 @@ load_secret() {
 load_secret AGENT_DB_PASSWORD "${AGENT_DB_PASSWORD_FILE:-}"
 load_secret AGENT_REDIS_PASSWORD "${AGENT_REDIS_PASSWORD_FILE:-}"
 load_secret DEEPSEEK_API_KEY "${DEEPSEEK_API_KEY_FILE:-}"
+load_secret AGENT_MINIO_ACCESS_KEY "${AGENT_MINIO_ACCESS_KEY_FILE:-}"
+load_secret AGENT_MINIO_SECRET_KEY "${AGENT_MINIO_SECRET_KEY_FILE:-}"
 exec java -XX:MaxRAMPercentage=60.0 -XX:+ExitOnOutOfMemoryError -jar /opt/tianmu/app.jar "$@"

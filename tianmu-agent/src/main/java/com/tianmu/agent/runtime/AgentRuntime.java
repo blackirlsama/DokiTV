@@ -115,6 +115,9 @@ public class AgentRuntime {
         return harness.stage(run, context.finalizing() ? "agent.model.finalize" : "agent.model", HookPoint.PRE_MODEL, HookPoint.POST_MODEL,
                 Map.of("run.finalizing", context.finalizing(), "loop.step", run.snapshot().steps(),
                         "agent.available_tools", context.availableTools().stream().map(ToolDefinition::name).limit(32).toList()), () -> {
+            TraceDetails.capture("input", context, "MODEL_CONTEXT");
+            TraceAttributes.apply(io.opentelemetry.api.trace.Span.current(), Map.of("model.name", model.modelName() == null ? "unspecified" : model.modelName(),
+                    "model.streaming", false, "model.first_token_state", "NOT_APPLICABLE"));
             Decision raw = harness.modelCall(run, context.finalizing(), control -> context.finalizing()
                     ? model.finalizeWithoutTools(context, control) : model.decide(context, control));
             if (raw == null || raw.kind() == null) throw new AgentException("INVALID_DECISION", "Missing model decision");
@@ -139,7 +142,10 @@ public class AgentRuntime {
         run.emit("PROGRESS", Map.of("stage", "tool", "tool", name));
         ToolResult result;
         try {
-            result = harness.stage(run, "agent.tool", HookPoint.PRE_TOOL, HookPoint.POST_TOOL, Map.of("tool.name", name), () -> {
+            int attempt = name.equals(progress.failingTool) ? progress.consecutiveFailures + 1 : 1;
+            result = harness.stage(run, "agent.tool", HookPoint.PRE_TOOL, HookPoint.POST_TOOL,
+                    Map.of("tool.name", name, "execution.attempt", attempt, "execution.retry_count", attempt - 1), () -> {
+                TraceDetails.input(call);
                 ToolCall actual = harness.transform(run, TransformPoint.TOOL_CALL, call);
                 if (progress.successfulCalls.contains(actual)) throw new AgentException("NO_PROGRESS", "Repeated successful tool call");
                 ToolResult raw = tools.execute(actual, run);

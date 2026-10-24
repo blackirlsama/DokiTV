@@ -2,7 +2,8 @@
   {"id":"common.json-output","version":"1.0.0","path":"common/json-output.md"},
   {"id":"common.current-focus-boundary","version":"1.0.0","path":"common/current-focus-boundary.md"},
   {"id":"preparation.emotion","version":"1.1.0","path":"preparation/emotion.md"},
-  {"id":"preparation.understanding","version":"1.0.0","path":"preparation/understanding.md"},
+  {"id":"preparation.intent","version":"1.2.0","path":"preparation/intent.md"},
+  {"id":"preparation.understanding","version":"1.2.0","path":"preparation/understanding.md"},
   {"id":"harness.system","version":"1.1.0","path":"harness/system.md"},
   {"id":"harness.finalize","version":"1.0.0","path":"harness/finalize.md"}
 ]

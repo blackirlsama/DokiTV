@@ -31,7 +31,7 @@ class CatalogArchitectureTest {
         List<Resource> all = new ArrayList<>(Arrays.asList(original)); all.add(item); return all.toArray(Resource[]::new);
     }
     List<AgentTool> builtins() {
-        return new ArrayList<>(List.of(new ListSkillsTool(), new ReadSkillTool(), new ReadResultTool(),
+        return new ArrayList<>(List.of(new ListSkillsTool(), new ReadSkillTool(), new ReadResultTool(), new QueryDanmakuTool((q, s, c) -> { throw new AssertionError("Unexpected live query"); }), new CreateDanmakuReportTool(new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules()),
                 new QueryVideoMetricsTool((q, s) -> { fail("Query must not run"); return null; })));
     }
     @Test void newSkillAndToolCanRegisterWithoutChangingDispatcher() {
@@ -100,7 +100,7 @@ class CatalogArchitectureTest {
     }
     @Test void promptRegistryIsImmutableAndAllRuntimePromptsArePackaged() {
         PromptCatalog catalog = new PromptCatalog();
-        assertEquals(Set.of("common.json-output", "common.current-focus-boundary", "preparation.emotion", "preparation.understanding", "harness.system", "harness.finalize"), catalog.ids());
+        assertEquals(Set.of("common.json-output", "common.current-focus-boundary", "preparation.emotion", "preparation.intent", "preparation.understanding", "harness.system", "harness.finalize"), catalog.ids());
         assertTrue(catalog.text("harness.finalize").contains("Do not call tools"));
         assertThrows(UnsupportedOperationException.class, () -> catalog.ids().clear());
         assertThrows(IllegalStateException.class, () -> catalog.text("not-registered"));

@@ -63,6 +63,21 @@ class BusinessTraceTest {
             assertTrue(spans(f, SpanType.AGENT_START).isEmpty()); assertTrue(spans(f, SpanType.LLM_INFERENCE).isEmpty());
         }
     }
+    @Test void intentRecognitionHasTypedSpanAndMergedRouteAttribute() {
+        try (var f = new HarnessLifecycleTest.Fixture(); var prep = new PreparationService(
+                (input, control) -> Optional.empty(), new PreparationFlowTest.Model(),
+                new PreparationPolicy(Duration.ofMillis(200), Duration.ofSeconds(2)), f.harness)) {
+            RunState run = f.run();
+            new RequestOrchestrator(prep, new AgentRuntime(c -> Decision.clarify("SECRET_CLARIFICATION"), f.tools, f.harness), f.harness).execute(run);
+            assertEquals("OTHER", one(f, SpanType.INTENT_RECOGNITION).getAttributes().get(AttributeKey.stringKey("preparation.intent")));
+            assertEquals("OTHER", one(f, SpanType.PRE_ROUTE).getAttributes().get(AttributeKey.stringKey("preparation.intent")));
+            assertTrue(run.snapshot().preparationCalls() >= 2 && run.snapshot().preparationCalls() <= 3);
+            one(f, SpanType.QUERY_UNDERSTANDING);
+            String exported = f.recording.spans.stream().map(s -> TraceEnvelope.from(s, "test", "test").toString()).toList().toString();
+            assertFalse(exported.contains("SECRET_CLARIFICATION")); assertFalse(exported.contains(run.message));
+        }
+    }
+
     @Test void failuresHaveOneTerminalRecordAndSafeErrorCode() {
         try (var f = new HarnessLifecycleTest.Fixture()) {
             RunState run = f.run(); f.execute(run, c -> { throw new IllegalStateException("SECRET_EXCEPTION"); });

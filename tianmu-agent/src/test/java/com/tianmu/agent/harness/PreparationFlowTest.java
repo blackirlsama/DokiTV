@@ -19,6 +19,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PreparationFlowTest {
     static class Model implements PreparationModelPort {
+        public Intent intent(Input i, CallControl c) {
+            return TaskMeaning.defaults().resolve(i.query(), i.businessDate()).type().equals("video.metric") ? Intent.VIDEO_METRIC : Intent.OTHER;
+        }
         public Emotion emotion(Input i, CallControl c) { return Emotion.NEUTRAL; }
         Understanding accepted(Input i, String query) {
             return Understanding.proceed(TaskMeaning.defaults().resolve(i.query(), i.businessDate()).conditions(), query);
@@ -36,6 +39,8 @@ class PreparationFlowTest {
     @Test void faqShortCircuitsAllModelsAndTools() {
         try (var f = new HarnessLifecycleTest.Fixture(); var prep = service(f,
                 (i, c) -> Optional.of(new FaqAnswer("help", "1", "Approved help")), new Model() {
+                    public Intent intent(Input i, CallControl c) { fail("Intent must not run on FAQ hit"); return null; }
+                    public Understanding understand(Input i, CallControl c) { fail("Understanding must not run on FAQ hit"); return null; }
                     public Emotion emotion(Input i, CallControl c) { fail("Small model must not run"); return null; }
                 })) {
             RunState run = f.run();
@@ -44,19 +49,21 @@ class PreparationFlowTest {
             assertEquals(StopReason.FAQ_ANSWER, run.snapshot().stopReason());
             assertEquals("help", run.snapshot().faqId());
             assertEquals(0, run.snapshot().modelCalls());
+            assertEquals(0, run.snapshot().preparationCalls());
             assertEquals(0, run.snapshot().steps());
             assertEquals(0, f.queries.get());
             assertTrue(run.snapshot().answer().evidenceIds().isEmpty());
         }
     }
-    @Test void understandingAndEmotionRunConcurrentlyAndCarryContext() {
-        CyclicBarrier barrier = new CyclicBarrier(2);
+    @Test void threeRecognitionBranchesRunConcurrentlyAndCarryContext() {
+        CyclicBarrier barrier = new CyclicBarrier(3);
         try (var f = new HarnessLifecycleTest.Fixture(); var prep = service(f, miss(), new Model() {
             void meet() {
                 assertNotNull(org.slf4j.MDC.get("run_id"));
                 try { barrier.await(300, TimeUnit.MILLISECONDS); } catch (Exception e) { throw new IllegalStateException(e); }
             }
             public Emotion emotion(Input i, CallControl c) { meet(); return Emotion.NEGATIVE; }
+            public Intent intent(Input i, CallControl c) { meet(); return Intent.OTHER; }
             public Understanding understand(Input i, CallControl c) { meet(); return accepted(i, i.query() + " please"); }
         })) {
             RunState run = f.run();
@@ -65,12 +72,13 @@ class PreparationFlowTest {
                 assertEquals(run.message, context.preparation().originalQuery());
                 assertTrue(context.preparation().emotion() == Emotion.NEGATIVE || context.preparation().skippedStages().contains("emotion"));
                 assertEquals(run.owner, context.scope());
+                assertEquals(Intent.OTHER, context.preparation().intent());
                 return Decision.clarify("Next question");
             });
             assertEquals(Route.HARNESS, run.snapshot().route());
             assertTrue(run.snapshot().preparation().degradedStages().isEmpty());
             var spans = f.recording.spans.stream().filter(s -> s.getName().startsWith("agent.prepare.")).toList();
-            assertEquals(4, spans.size());
+            assertEquals(5, spans.size());
             assertTrue(spans.stream().allMatch(s -> s.getTraceId().equals(run.snapshot().traceId())));
         }
     }
@@ -90,7 +98,8 @@ class PreparationFlowTest {
             RunState run = new RunState(new AccessScope("demo", "alice", Set.of(1001L)), "查询视频1001的弹幕数");
             execute(f, prep, run, forbidden());
             assertEquals(Status.NEEDS_INPUT, run.snapshot().status());
-            assertEquals(Route.CLARIFY, run.snapshot().route()); assertEquals(0, run.snapshot().totalModelCalls());
+            assertEquals(Route.CLARIFY, run.snapshot().route());
+            assertTrue(run.snapshot().preparationCalls() >= 2 && run.snapshot().preparationCalls() <= 3);
             assertTrue(run.snapshot().clarification().contains("日期"));
         }
     }
@@ -156,7 +165,7 @@ class PreparationFlowTest {
         }
     }
     @Test void cancelDuringParallelPreparationCannotDeliverLateResults() throws Exception {
-        CountDownLatch entered = new CountDownLatch(2), release = new CountDownLatch(1);
+        CountDownLatch entered = new CountDownLatch(3), release = new CountDownLatch(1);
         AtomicInteger cancelCallbacks = new AtomicInteger();
         ExecutorService worker = Executors.newSingleThreadExecutor();
         try (var f = new HarnessLifecycleTest.Fixture(); var prep = service(f, miss(), new Model() {
@@ -165,6 +174,7 @@ class PreparationFlowTest {
                 try { release.await(2, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
             }
             public Emotion emotion(Input i, CallControl c) { block(c); return Emotion.NEUTRAL; }
+            public Intent intent(Input i, CallControl c) { block(c); return Intent.OTHER; }
             public Understanding understand(Input i, CallControl c) { block(c); return accepted(i, i.query()); }
         })) {
             RunState run = f.run();
@@ -172,7 +182,7 @@ class PreparationFlowTest {
             assertTrue(entered.await(2, TimeUnit.SECONDS)); run.cancel(); task.get(2, TimeUnit.SECONDS);
             assertEquals(Status.CANCELLED, run.snapshot().status());
             assertNull(run.snapshot().answer()); assertNull(run.snapshot().preparation());
-            assertEquals(2, cancelCallbacks.get());
+            assertEquals(3, cancelCallbacks.get());
         } finally { release.countDown(); worker.shutdownNow(); }
     }
     @Test void modelConditionsCannotInventChangeOrOmitServerConditions() {
@@ -215,6 +225,73 @@ class PreparationFlowTest {
             assertTrue(run.preparedRequest().degradedStages().contains("rewrite"));
         }
     }
+    @Test void intentFailureOrUnknownCannotEnterLoop() {
+        for (boolean unavailable : List.of(false, true)) {
+            try (var f = new HarnessLifecycleTest.Fixture(); var prep = service(f, miss(), new Model() {
+                public Intent intent(Input i, CallControl c) {
+                    if (unavailable) throw new IllegalStateException("provider unavailable");
+                    return Intent.UNKNOWN;
+                }
+            })) {
+                RunState run = f.run(); execute(f, prep, run, forbidden());
+                assertEquals(Status.NEEDS_INPUT, run.snapshot().status());
+                assertEquals(Intent.UNKNOWN, run.preparedRequest().intent());
+                assertEquals(unavailable, run.preparedRequest().degradedStages().contains("intent"));
+                assertNull(run.task());
+            }
+        }
+    }
+
+    @Test void intentCannotContradictServerValidatedTask() {
+        try (var f = new HarnessLifecycleTest.Fixture(); var prep = service(f, miss(), new Model() {
+            public Intent intent(Input i, CallControl c) { return Intent.KNOWLEDGE; }
+        })) {
+            RunState run = new RunState(new AccessScope("demo", "alice", Set.of(1001L)), "查询视频1001昨天的弹幕数");
+            execute(f, prep, run, forbidden());
+            assertEquals(Status.NEEDS_INPUT, run.snapshot().status());
+            assertTrue(run.preparedRequest().degradedStages().contains("intent"));
+            assertEquals(0, f.queries.get());
+        }
+    }
+
+    @Test void metricIntentCannotSupplyMissingServerConditions() {
+        try (var f = new HarnessLifecycleTest.Fixture(); var prep = service(f, miss(), new Model() {
+            public Intent intent(Input i, CallControl c) { return Intent.VIDEO_METRIC; }
+        })) {
+            RunState run = new RunState(new AccessScope("demo", "alice", Set.of(1001L)), "查一下弹幕数");
+            execute(f, prep, run, forbidden());
+            assertEquals(Status.NEEDS_INPUT, run.snapshot().status());
+            assertNull(run.task()); assertEquals(0, f.queries.get());
+        }
+    }
+
+    @Test void intentTimeoutIsBoundedAndCompletedUnderstandingIsNotExecuted() {
+        CountDownLatch release = new CountDownLatch(1);
+        try (var f = new HarnessLifecycleTest.Fixture(); var prep = new PreparationService(miss(), new Model() {
+            public Intent intent(Input i, CallControl c) {
+                try { release.await(2, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                return Intent.OTHER;
+            }
+        }, new PreparationPolicy(Duration.ofMillis(200), Duration.ofMillis(400), Duration.ofMillis(100), Duration.ofMillis(40)), f.harness)) {
+            RunState run = f.run();
+            assertTimeoutPreemptively(Duration.ofSeconds(1), () -> execute(f, prep, run, forbidden()));
+            assertEquals(Status.NEEDS_INPUT, run.snapshot().status());
+            assertTrue(run.preparedRequest().degradedStages().contains("intent"));
+            assertNull(run.task());
+        } finally { release.countDown(); }
+    }
+
+    @Test void intentPolicyFailureIsNotConvertedToClarification() {
+        try (var f = new HarnessLifecycleTest.Fixture(); var prep = service(f, miss(), new Model() {
+            public Intent intent(Input i, CallControl c) { throw new AgentException("FORBIDDEN", "denied"); }
+        })) {
+            RunState run = f.run(); execute(f, prep, run, forbidden());
+            assertEquals(Status.FAILED, run.snapshot().status());
+            assertEquals("FORBIDDEN", run.snapshot().errorCode());
+            assertNull(run.preparedRequest());
+        }
+    }
+
     @Test void unclassifiedTaskCannotAcquireModelInventedConditions() {
         try (var f = new HarnessLifecycleTest.Fixture(); var prep = service(f, miss(), new Model() {
             public Understanding understand(Input i, CallControl c) {

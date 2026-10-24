@@ -52,43 +52,51 @@ public class PreparationService implements AutoCloseable {
         Input input = new Input(query, run.businessDate, run.owner, run.memory());
         Set<String> degraded = new LinkedHashSet<>(), skipped = new LinkedHashSet<>();
         Instant faqDeadline = deadline(run, policy.faqTimeout());
-        Branch<Optional<FaqAnswer>> lookup = submit(run, "faq", faqDeadline, c -> faq.find(input, c));
+        Branch<Optional<FaqAnswer>> lookup = submit(run, "faq", faqDeadline, input, c -> faq.find(input, c));
         Optional<FaqAnswer> hit;
         try { hit = await(run, lookup, faqDeadline); }
         catch (PreparationUnavailable e) { degraded.add("faq"); hit = Optional.empty(); }
         finally { dispose(lookup); }
         run.checkpoint();
         if (hit.isPresent()) return new Result(Route.FAQ,
-                new PreparedRequest(run.message, query, Emotion.UNKNOWN, degraded, Set.of("understanding", "emotion")), hit.get(), null);
+                new PreparedRequest(run.message, query, Emotion.UNKNOWN, degraded, Set.of("intent", "understanding", "emotion")), hit.get(), null);
 
         if (repository != null) run.memory(harness.stage(run, "agent.memory.load", null, null, Map.of(), () -> repository.memory(run)));
         Input contextInput = new Input(query, run.businessDate, run.owner, run.memory());
-        Optional<Clarification> required = harness.stage(run, "agent.prepare.validate", null, null, Map.of(),
-                () -> validators.stream().map(v -> v.validate(contextInput)).flatMap(Optional::stream).filter(Clarification::required).findFirst());
-        if (required.isPresent()) return new Result(Route.CLARIFY,
-                new PreparedRequest(run.message, query, Emotion.UNKNOWN, degraded, Set.of("understanding", "emotion")), null, required.get().question());
-
         run.emit("PROGRESS", Map.of("stage", "preparing"));
         Instant end = deadline(run, policy.understandingTimeout());
-        Instant emotionEnd = earlier(end, deadline(run, policy.emotionTimeout()));
-        // The critical branch is submitted first; emotion is independent and never awaited separately.
-        Branch<Understanding> understanding = submit(run, "understanding", end, c -> model.understand(contextInput, c));
-        Branch<Emotion> emotion = submit(run, "emotion", emotionEnd, c -> model.emotion(contextInput, c));
+        Instant intentEnd = deadline(run, policy.intentTimeout());
+        Instant emotionEnd = deadline(run, policy.emotionTimeout());
+        // All branches read the same immutable snapshot. Only this coordinator merges results.
+        Branch<Understanding> understanding = submit(run, "understanding", end, contextInput, c -> model.understand(contextInput, c));
+        Branch<Intent> intent = submit(run, "intent", intentEnd, contextInput, c -> model.intent(contextInput, c));
+        Branch<Emotion> emotion = submit(run, "emotion", emotionEnd, contextInput, c -> model.emotion(contextInput, c));
         try {
+            Intent recognized;
+            try { recognized = await(run, intent, intentEnd); }
+            catch (PreparationUnavailable e) { degraded.add("intent"); recognized = Intent.UNKNOWN; }
             Understanding result;
             try { result = await(run, understanding, end); }
             catch (PreparationUnavailable e) {
                 degraded.add("understanding");
                 result = Understanding.clarify("暂时无法确认查询条件，请明确要分析的视频、指标和日期后重试。");
             }
-            if (!result.needsClarification() && !validConditions(contextInput, result.conditions())) {
+            Optional<Clarification> required = harness.stage(run, "agent.prepare.validate", null, null, Map.of(),
+                    () -> validators.stream().map(v -> v.validate(contextInput)).flatMap(Optional::stream).filter(Clarification::required).findFirst());
+            if (required.isPresent()) result = Understanding.clarify(required.get().question());
+            else if (recognized == Intent.UNKNOWN) {
+                result = Understanding.clarify("暂时无法确认你的任务意图，请说明要查询的数据或需要帮助的具体问题。");
+            } else if (!result.needsClarification() && !validIntent(contextInput, recognized)) {
+                degraded.add("intent");
+                result = Understanding.clarify("任务意图与查询条件存在冲突，请明确要查询的视频、日期和指标。");
+            } else if (!result.needsClarification() && !validConditions(contextInput, result.conditions())) {
                 degraded.add("understanding");
                 result = Understanding.clarify("查询条件存在冲突，请明确要查询的视频、日期和指标。");
             }
             if (result.needsClarification()) {
                 skipped.add("rewrite");
                 Emotion feeling = readyEmotion(run, emotion, emotionEnd, degraded, skipped);
-                return new Result(Route.CLARIFY, new PreparedRequest(run.message, query, feeling, degraded, skipped), null, result.clarificationQuestion());
+                return new Result(Route.CLARIFY, new PreparedRequest(run.message, query, feeling, degraded, skipped, recognized), null, result.clarificationQuestion());
             }
             String rewritten = result.rewrittenQuery();
             if (!safeRewrite(query, rewritten)
@@ -97,8 +105,15 @@ public class PreparationService implements AutoCloseable {
             }
             Emotion feeling = readyEmotion(run, emotion, emotionEnd, degraded, skipped);
             run.checkpoint();
-            return new Result(Route.HARNESS, new PreparedRequest(run.message, rewritten, feeling, degraded, skipped), null, null);
-        } finally { dispose(understanding); dispose(emotion); }
+            return new Result(Route.HARNESS, new PreparedRequest(run.message, rewritten, feeling, degraded, skipped, recognized), null, null);
+        } finally { dispose(understanding); dispose(intent); dispose(emotion); }
+    }
+    private boolean validIntent(Input input, Intent intent) {
+        return switch (meaning.resolve(input.query(), input.businessDate()).type()) {
+            case "danmaku.report" -> intent == Intent.DANMAKU_REPORT;
+            case "video.metric" -> intent == Intent.VIDEO_METRIC;
+            default -> intent != Intent.VIDEO_METRIC && intent != Intent.DANMAKU_REPORT;
+        };
     }
     /** Model candidates never grant scope or supply missing server-side task conditions. */
     private boolean validConditions(Input input, Map<String, Object> proposed) {
@@ -106,6 +121,10 @@ public class PreparationService implements AutoCloseable {
         if (!expected.keySet().equals(proposed.keySet())) return false;
         return expected.entrySet().stream().allMatch(e -> {
             Object actual = proposed.get(e.getKey());
+            if (Set.of("start", "end").contains(e.getKey()) && e.getValue() instanceof String expectedTime && actual instanceof String candidateTime) {
+                try { return LocalDateTime.parse(expectedTime).equals(LocalDateTime.parse(candidateTime)); }
+                catch (DateTimeException ignored) { return false; }
+            }
             if (e.getValue() instanceof Number number && actual instanceof Number candidate)
                 return new java.math.BigDecimal(number.toString()).compareTo(new java.math.BigDecimal(candidate.toString())) == 0;
             return Objects.equals(e.getValue(), actual);
@@ -116,25 +135,35 @@ public class PreparationService implements AutoCloseable {
         try { return await(run, branch, end); }
         catch (PreparationUnavailable e) { degraded.add("emotion"); return Emotion.UNKNOWN; }
     }
-    private Instant earlier(Instant a, Instant b) { return a.isBefore(b) ? a : b; }
     private Instant deadline(RunState run, Duration timeout) {
         Instant local = Instant.now().plus(timeout);
         return local.isBefore(run.deadline()) ? local : run.deadline();
     }
-    private <T> Branch<T> submit(RunState run, String name, Instant deadline, Function<CallControl, T> operation) {
+    private <T> Branch<T> submit(RunState run, String name, Instant deadline, Input input, Function<CallControl, T> operation) {
         CancellationToken token = new CancellationToken();
         CallControl control = new CallControl(deadline, token);
-        FutureTask<Completed<T>> task = new FutureTask<>(() -> harness.stage(run, "agent.prepare." + name, null, null, Map.of(), () -> {
-            control.checkpoint();
-            if (!Instant.now().isBefore(deadline)) throw new PreparationUnavailable();
-            try {
-                if (!name.equals("faq")) run.preparationCallStarted();
-                return new Completed<>(operation.apply(control), Instant.now());
-            } catch (AgentException e) {
-                if (!Set.of("CANCELLED", "DEADLINE_EXCEEDED").contains(e.code())) run.fail(e.code());
-                throw e;
-            }
-        }));
+        long submittedAt = System.nanoTime();
+        long timeoutMs = Math.max(0, Duration.between(Instant.now(), deadline).toMillis());
+        FutureTask<Completed<T>> task = new FutureTask<>(() -> {
+            // Trace receives the actual business result, not the internal deadline wrapper.
+            java.util.concurrent.atomic.AtomicReference<Instant> completedAt = new java.util.concurrent.atomic.AtomicReference<>();
+            T value = harness.stage(run, "agent.prepare." + name, null, null,
+                    Map.of("execution.queue_ms", Math.max(0, (System.nanoTime() - submittedAt) / 1_000_000), "execution.timeout_ms", timeoutMs), () -> {
+                com.tianmu.agent.harness.trace.TraceDetails.input(input);
+                control.checkpoint();
+                if (!Instant.now().isBefore(deadline)) throw new PreparationUnavailable();
+                try {
+                    if (!name.equals("faq")) run.preparationCallStarted();
+                    T result = operation.apply(control);
+                    completedAt.set(Instant.now());
+                    return result;
+                } catch (AgentException e) {
+                    if (!Set.of("CANCELLED", "DEADLINE_EXCEEDED").contains(e.code())) run.fail(e.code());
+                    throw e;
+                }
+            });
+            return new Completed<>(value, completedAt.get());
+        });
         CancellationToken.Registration registration = run.cancellation().onCancel(() -> {
             task.cancel(true); token.cancel(run.cancellation().reason());
         });

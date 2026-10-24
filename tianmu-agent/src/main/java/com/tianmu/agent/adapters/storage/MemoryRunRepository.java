@@ -16,9 +16,12 @@ import java.util.*;
 public final class MemoryRunRepository implements RunRepository {
     private final Map<UUID, RunState> runs = new HashMap<>();
     private final Map<String, UUID> keys = new HashMap<>();
+    private record Report(UUID runId, byte[] html) {}
+    private final Map<String, Report> reports = new HashMap<>();
     public synchronized Created create(String message, AccessScope owner, UUID session, String key, UUID reply) {
         runs.values().removeIf(r -> r.createdAt.isBefore(Instant.now().minusSeconds(3600)) && AgentTypes.terminal(r.snapshot().status()));
         keys.values().removeIf(id -> !runs.containsKey(id));
+        reports.values().removeIf(report -> !runs.containsKey(report.runId()));
         if (runs.size() >= 200) throw new AgentException("CAPACITY_EXCEEDED", "Ephemeral run capacity reached");
         if (reply != null) throw new AgentException("STORAGE_REQUIRED", "Clarification resumption requires persistent storage");
         String identity = owner.tenantId() + ":" + owner.userId() + ":" + key;
@@ -56,5 +59,20 @@ public final class MemoryRunRepository implements RunRepository {
             throw new AgentException("RUN_NOT_FOUND", "Run not found");
         if (!caller.videoIds().containsAll(run.owner.videoIds())) throw new AgentException("FORBIDDEN", "Historical scope is no longer accessible");
         return run;
+    }
+    @Override public synchronized com.tianmu.agent.core.DanmakuTypes.ReportRef saveReport(UUID runId, AccessScope owner, String evidenceId, byte[] html) {
+        RunState run = load(runId, owner); run.checkpoint();
+        Evidence evidence = run.execution().evidence().get(evidenceId);
+        if (evidence == null || evidence.analysis() == null || !evidence.owner().equals(owner) || !evidence.runId().equals(runId) || html.length > 262144)
+            throw new AgentException("INVALID_EVIDENCE", "Invalid report");
+        if (AgentTypes.terminal(run.snapshot().status())) throw new AgentException("RUN_TERMINATED", "Task is terminal");
+        if (reports.values().stream().filter(r -> r.runId().equals(runId)).count() >= 2) throw new AgentException("CAPACITY_EXCEEDED", "Report limit reached");
+        String id = "rp_" + UUID.randomUUID(); reports.put(id, new Report(runId, html.clone()));
+        return new com.tianmu.agent.core.DanmakuTypes.ReportRef(id, "/api/agent/runs/" + runId + "/reports/" + id);
+    }
+    @Override public synchronized byte[] report(UUID runId, AccessScope caller, String artifactId) {
+        load(runId, caller); Report report = reports.get(artifactId);
+        if (report == null || !report.runId().equals(runId)) throw new AgentException("RESULT_NOT_FOUND", "Report not found");
+        return report.html().clone();
     }
 }

@@ -34,13 +34,18 @@ public class HookDispatcher {
         for (Registered hook : hooks) {
             if (!hook.points().contains(event.point())) continue;
             Span span = tracer.spanBuilder("hook." + event.point().name().toLowerCase(Locale.ROOT)).startSpan();
+            TraceNode.begin(span, "hook." + event.point().name().toLowerCase(Locale.ROOT));
             TraceAttributes.apply(span, event.attributes());
             TraceAttributes.apply(span, Map.of("run.id", event.runId().toString(), "hook.name", hook.name(),
                     "hook.point", event.point().name(), "hook.mode", hook.mode().name()));
             try (Scope scope = span.makeCurrent(); TraceLogScope mdc = new TraceLogScope(span, event.runId().toString())) {
+                TraceDetails.input(event);
                 hook.hook().onEvent(event);
+                TraceDetails.output(Map.of("completed", true));
+                TraceNode.success(span);
             } catch (Exception e) {
                 span.setStatus(StatusCode.ERROR);
+                TraceAttributes.apply(span, Map.of("node.status", "FAILED"));
                 TraceAttributes.apply(span, Map.of("hook.failed", true, "exception.type", e.getClass().getSimpleName()));
                 if (hook.mode() == AgentHook.Mode.GATE) throw new AgentException("HOOK_REJECTED", "A harness gate rejected this operation");
                 observerFailures.increment();

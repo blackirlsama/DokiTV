@@ -3,6 +3,7 @@ package com.tianmu.agent.adapters.business;
 import com.fasterxml.jackson.databind.*;
 import com.tianmu.agent.access.IdentityPort;
 import com.tianmu.agent.core.AgentException;
+import com.tianmu.agent.core.DanmakuTarget;
 import com.tianmu.agent.core.AgentTypes.*;
 import com.tianmu.agent.query.BusinessQueryPort;
 import com.tianmu.agent.runtime.control.CallControl;
@@ -29,7 +30,7 @@ public class BusinessAdapters {
     }
 }
 
-final class RemoteBusinessAdapter implements IdentityPort, BusinessQueryPort {
+final class RemoteBusinessAdapter implements IdentityPort, BusinessQueryPort, com.tianmu.agent.query.DanmakuQueryPort {
     private final BusinessProperties config;
     private final ObjectMapper json;
     private final ObjectProvider<RunRepository> repositories;
@@ -92,7 +93,7 @@ final class RemoteBusinessAdapter implements IdentityPort, BusinessQueryPort {
     @Override public AccessScope forCreate(String credential, String message, UUID reply) {
         AccessScope principal = authenticate(credential); Set<Long> resources = new HashSet<>();
         if (reply != null) resources.addAll(repositories.getObject().resourcesForRun(reply, principal));
-        var matcher = Pattern.compile("视频\\s*(\\d+)").matcher(message);
+        var matcher = DanmakuTarget.matcher(message);
         while (matcher.find()) try { resources.add(Long.parseLong(matcher.group(1))); }
         catch (NumberFormatException e) { throw new AgentException("INVALID_REQUEST", "Invalid video ID"); }
         return grant(principal, resources, true);
@@ -113,5 +114,15 @@ final class RemoteBusinessAdapter implements IdentityPort, BusinessQueryPort {
                 credentials.token(scope.authorizationRef()), null, control);
         try { return json.treeToValue(answer, MetricData.class); }
         catch (Exception e) { throw new AgentException("INVALID_EVIDENCE", "Business metric schema mismatch"); }
+    }
+    @Override public com.tianmu.agent.core.DanmakuTypes.Dataset query(com.tianmu.agent.core.DanmakuTypes.Query query, AccessScope scope, CallControl control) {
+        if (!scope.videoIds().contains(query.videoId())) throw new AgentException("FORBIDDEN", "videoId is outside prepared scope");
+        query.checkTime(Instant.now());
+        String start = java.net.URLEncoder.encode(query.start().toString(), java.nio.charset.StandardCharsets.UTF_8);
+        String end = java.net.URLEncoder.encode(query.end().toString(), java.nio.charset.StandardCharsets.UTF_8);
+        JsonNode answer = request("GET", "/internal/agent/danmaku-analysis?videoId=" + query.videoId() + "&start=" + start + "&end=" + end,
+                credentials.token(scope.authorizationRef()), null, control);
+        try { return json.treeToValue(answer, com.tianmu.agent.core.DanmakuTypes.Dataset.class); }
+        catch (Exception e) { throw new AgentException("INVALID_EVIDENCE", "Analysis schema mismatch"); }
     }
 }

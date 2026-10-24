@@ -1,0 +1,1 @@
+{"name":"danmaku-analysis","version":"1.1.0","description":"按videoId和时间范围分析弹幕并生成HTML报告。视频与直播间使用相同的数据与权限：全量统计趋势、去重有限片段的话题/问题/反馈观察及建议。","tools":["query_danmaku","create_danmaku_report"]}

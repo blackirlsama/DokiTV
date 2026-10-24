@@ -50,6 +50,19 @@ class BusinessIntegrationTest {
     void bullet(long id, Instant time) {
         db.update("INSERT INTO bullet(bullet_id,video_id,user_id,content,color,playback_time,create_time) VALUES(?,1001,881,'fixture','ffffff',1,?)", id, Timestamp.from(time));
     }
+    @Test void liveAnalysisCountsRangeBoundariesAndDoesNotExposeUserIdentifiers() {
+        var service = new BusinessDanmakuAnalysis(db,new BridgeProperties("tianmu",Set.of("normal"),"Asia/Shanghai",3));
+        LocalDateTime start=day.atTime(20,0), end=day.atTime(22,0);
+        long seed=800000;
+        for(int i=0;i<10;i++) db.update("INSERT INTO bullet(bullet_id,video_id,user_id,content,playback_time,create_time) VALUES(?,1001,881,?,0,?)",
+                seed+i,"什么时候发货？13812345678",Timestamp.from(start.plusMinutes(i).atZone(ZoneId.of("Asia/Shanghai")).toInstant()));
+        db.update("INSERT INTO bullet(bullet_id,video_id,user_id,content,playback_time,create_time) VALUES(?,1001,881,'outside',0,?)",seed+10,Timestamp.from(end.atZone(ZoneId.of("Asia/Shanghai")).toInstant()));
+        var result=service.query(principal(),1001,start,end);
+        assertEquals(10,result.totalMessages()); assertEquals(1,result.uniqueSenders());
+        assertEquals(10,result.buckets().stream().mapToLong(BusinessDanmakuAnalysis.Bucket::count).sum());
+        assertTrue(result.samples().size()<=48); assertTrue(result.samples().stream().allMatch(s->!s.text().contains("13812345678")));
+        assertEquals(403,assertThrows(BridgeException.class,()->service.query(principal(),1002,start,end)).status());
+    }
     @Test void realJwtAndRedisSessionAreBothRequired() {
         assertEquals("881", principal().userId());
         assertEquals("UNAUTHORIZED", assertThrows(BridgeException.class, () -> auth.authenticate("invalid")).code());

@@ -8,7 +8,7 @@ import java.util.*;
 final class TransformInvariants {
     private TransformInvariants() {}
     private static final Set<String> FACT_KEYS = Set.of("video_id", "date", "metric", "value", "metric_version",
-            "source", "data_as_of", "complete", "demo", "evidence_id", "skill", "tool_schemas", "error_code", "retryable", "attempt");
+            "source", "data_as_of", "complete", "demo", "evidence_id", "skill", "tool_schemas", "error_code", "retryable", "attempt", "analysis", "sampling_method");
     static void require(boolean condition) {
         if (!condition) throw new AgentException("HOOK_TRANSFORM_INVALID", "Transform violated a harness invariant");
     }

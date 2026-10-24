@@ -8,10 +8,10 @@ import java.util.*;
 public final class TraceAttributes {
     private TraceAttributes() {}
     private static final Set<String> ALLOWED = Set.of("run.id", "run.status", "run.steps", "run.stop_reason", "run.model_calls", "run.finalizing", "loop.step",
-            "tool.name", "skill.name", "skill.version", "hook.name", "hook.point", "hook.mode",
+            "tool.name", "tool.call_id", "skill.name", "skill.version", "hook.name", "hook.point", "hook.mode",
             "hook.failed", "operation.executed", "operation.outcome", "error.code", "exception.type",
             "input.char_count", "context.observation_count", "answer.evidence_count", "http.method", "http.route", "http.status_code",
-            "request.route", "faq.id", "faq.version", "preparation.emotion", "preparation.degraded_count", "preparation.skipped_count",
+            "request.route", "faq.id", "faq.version", "preparation.emotion", "preparation.intent", "preparation.degraded_count", "preparation.skipped_count",
             "run.preparation_calls", "run.total_model_calls",
             "model.name", "model.input_tokens", "model.output_tokens", "span.type", "session.id", "run.turn_seq",
             "tenant.id", "actor.id", "run.trace_id", "route.reason", "model.decision", "model.selected_tool",
@@ -19,7 +19,15 @@ public final class TraceAttributes {
             "agent.reached_turn_limit", "agent.outcome", "tool.success", "tool.has_evidence", "tool.terminal_delivery",
             "output.char_count", "answer.char_count", "finish.type", "run.e2e_ms", "run.answer_ready_ms",
             "usage.input_tokens", "usage.output_tokens", "usage.reported_calls", "usage.scope", "usage.complete",
-            "delivery.type", "delivery.replay", "delivery.success", "delivery.first_content_ms", "delivery.e2e_ms");
+            "delivery.type", "delivery.replay", "delivery.success", "delivery.first_content_ms", "delivery.e2e_ms",
+            "node.type", "node.status", "execution.attempt", "execution.retry_count", "execution.retryable", "execution.timeout_ms", "execution.queue_ms", "execution.active_ms", "execution.wait_ms",
+            "model.provider", "model.usage_state", "model.total_tokens", "model.cache_hit_tokens", "model.cache_miss_tokens", "model.reasoning_tokens", "model.finish_reason", "model.temperature", "model.max_tokens", "model.streaming", "model.first_token_state", "model.response_ms", "model.message_count", "model.reasoning_state", "model.http_status",
+            "usage.total_tokens", "usage.cache_hit_tokens", "usage.reasoning_tokens", "usage.state",
+            "context.input_bytes", "context.output_bytes", "context.changed",
+            "detail.input_ref", "detail.input_state", "detail.input_bytes", "detail.input_redacted",
+            "detail.output_ref", "detail.output_state", "detail.output_bytes", "detail.output_redacted",
+            "detail.provider_output_ref", "detail.provider_output_state", "detail.provider_output_bytes", "detail.provider_output_redacted",
+            "detail.error_ref", "detail.error_state", "detail.error_bytes", "detail.error_redacted");
     public static Map<String, Object> sanitize(Map<String, ?> values) {
         Map<String, Object> clean = new TreeMap<>();
         values.forEach((key, value) -> {
@@ -35,7 +43,8 @@ public final class TraceAttributes {
     }
     public static void apply(Span span, Map<String, ?> attributes) {
         sanitize(attributes).forEach((key, value) -> {
-            if (value instanceof Number number) span.setAttribute(key, number.longValue());
+            if (value instanceof Double || value instanceof Float) span.setAttribute(key, ((Number)value).doubleValue());
+            else if (value instanceof Number number) span.setAttribute(key, number.longValue());
             else if (value instanceof Boolean bool) span.setAttribute(key, bool);
             else if (value instanceof List<?> items) span.setAttribute(AttributeKey.stringArrayKey(key), items.stream().map(Object::toString).toList());
             else span.setAttribute(key, value.toString());

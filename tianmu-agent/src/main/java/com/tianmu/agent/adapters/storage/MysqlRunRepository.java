@@ -234,7 +234,8 @@ public final class MysqlRunRepository implements RunRepository, AutoCloseable {
         db.update("UPDATE agent_artifact SET expires_at=? WHERE tenant_id=? AND run_id=?", stamp(expiry), m.owner().tenantId(), m.id().toString());
         if (target.status() == Status.NEEDS_INPUT) {
             Map<String, Object> confirmed = ClarificationInputs.confirmed(m.query(), m.created().atZone(ZoneId.of("Asia/Shanghai")).toLocalDate());
-            List<String> missing = List.of("video_id", "date", "metric").stream().filter(field -> !confirmed.containsKey(field)).toList();
+            List<String> fields = com.tianmu.agent.preparation.DanmakuReportTask.requested(m.query()) ? List.of("video_id", "start", "end") : List.of("video_id", "date", "metric");
+            List<String> missing = fields.stream().filter(field -> !confirmed.containsKey(field)).toList();
             db.update("INSERT INTO agent_clarification(tenant_id,owner_user_id,session_id,run_id,original_query,confirmed_fields_json,missing_fields_json,base_history_version,expires_at) VALUES(?,?,?,?,?,?,?,?,?)",
                     m.owner().tenantId(), m.owner().userId(), m.session().toString(), m.id().toString(), m.query(), encode(confirmed), encode(missing), m.historyVersion(), stamp(now.plus(Duration.ofHours(24))));
         }
@@ -289,12 +290,12 @@ public final class MysqlRunRepository implements RunRepository, AutoCloseable {
                 session(m.session(), m.owner(), false);
                 var rows = db.queryForList("SELECT facts_json FROM agent_evidence WHERE tenant_id=? AND owner_user_id=? AND run_id=? AND evidence_id=? AND expires_at>UTC_TIMESTAMP(6)", m.owner().tenantId(), m.owner().userId(), m.id().toString(), id);
                 if (rows.isEmpty()) return null; audit(m, "EVIDENCE_READ", "AUTHORIZED");
-                return new Evidence(id, m.id(), m.owner(), decode(rows.get(0).get("facts_json"), MetricData.class));
+                return evidenceFacts(id, m, rows.get(0).get("facts_json"));
             });
         }
         public void put(Evidence value) {
             if (!value.runId().equals(m.id()) || !value.owner().equals(m.owner())) throw new AgentException("FORBIDDEN", "Evidence scope mismatch");
-            byte[] body = encode(value.data()).getBytes(StandardCharsets.UTF_8); String digest = FileObjectStore.hash(body);
+            byte[] body = encode(value.facts()).getBytes(StandardCharsets.UTF_8); String digest = FileObjectStore.hash(body);
             String artifact = "ar_" + UUID.randomUUID(), object = artifact + ".json";
             write(() -> {
                 var sess = session(m.session(), m.owner(), true); var row = row(m.id(), m.owner(), true); active(sess, row, m);
@@ -309,7 +310,7 @@ public final class MysqlRunRepository implements RunRepository, AutoCloseable {
                 if (terminal(row)) throw new AgentException("RUN_TERMINATED", "Evidence cannot be added after completion");
                 db.update("UPDATE agent_artifact SET status='READY',content_sha256=?,size_bytes=?,ready_at=UTC_TIMESTAMP(6) WHERE tenant_id=? AND artifact_id=?", digest, body.length, m.owner().tenantId(), artifact);
                 db.update("INSERT INTO agent_evidence(tenant_id,owner_user_id,session_id,run_id,evidence_id,query_fingerprint,facts_json,content_sha256,raw_artifact_id,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                        m.owner().tenantId(), m.owner().userId(), m.session().toString(), m.id().toString(), value.id(), hash(encode(Map.of("video", value.data().videoId(), "date", value.data().date(), "metric", value.data().metric()))), new String(body, StandardCharsets.UTF_8), digest, artifact, stamp(Instant.now().plus(Duration.ofDays(30))));
+                        m.owner().tenantId(), m.owner().userId(), m.session().toString(), m.id().toString(), value.id(), hash(encode(value.analysis() == null ? Map.of("video", value.data().videoId(), "date", value.data().date(), "metric", value.data().metric()) : value.analysis().query())), new String(body, StandardCharsets.UTF_8), digest, artifact, stamp(Instant.now().plus(Duration.ofDays(30))));
                 audit(m, "EVIDENCE_REGISTERED", "READY"); return null;
             });
             } catch (RuntimeException failure) {
@@ -322,10 +323,15 @@ public final class MysqlRunRepository implements RunRepository, AutoCloseable {
             return read(() -> {
                 Map<String, Evidence> result = new LinkedHashMap<>();
                 db.query("SELECT evidence_id,facts_json FROM agent_evidence WHERE tenant_id=? AND owner_user_id=? AND run_id=? AND expires_at>UTC_TIMESTAMP(6)", rs -> {
-                    String id = rs.getString(1); result.put(id, new Evidence(id, m.id(), m.owner(), decode(rs.getString(2), MetricData.class)));
+                    String id = rs.getString(1); result.put(id, evidenceFacts(id, m, rs.getString(2)));
                 }, m.owner().tenantId(), m.owner().userId(), m.id().toString()); return Map.copyOf(result);
             });
         }
+    }
+    private Evidence evidenceFacts(String id, Meta m, Object facts) {
+        if (decode(facts, Map.class).containsKey("query"))
+            return new Evidence(id, m.id(), m.owner(), null, decode(facts, com.tianmu.agent.core.DanmakuTypes.Dataset.class));
+        return new Evidence(id, m.id(), m.owner(), decode(facts, MetricData.class));
     }
     private List<MemoryTypes.Message> history(UUID sid, AccessScope owner, long before) {
         List<Map<String, Object>> turns = db.queryForList("SELECT run_id,access_scope_json FROM agent_run WHERE tenant_id=? AND owner_user_id=? AND session_id=? AND history_visible=1 AND turn_seq<=? AND data_expires_at>UTC_TIMESTAMP(6) ORDER BY turn_seq DESC LIMIT 10", owner.tenantId(), owner.userId(), sid.toString(), before);
@@ -381,6 +387,39 @@ public final class MysqlRunRepository implements RunRepository, AutoCloseable {
     }
     public List<Map<String, Object>> artifacts(UUID runId, AccessScope owner) {
         return read(() -> { load(runId, owner); return db.queryForList("SELECT artifact_id AS artifactId,media_type AS mediaType,size_bytes AS sizeBytes,content_sha256 AS sha256 FROM agent_artifact WHERE tenant_id=? AND owner_user_id=? AND run_id=? AND status='READY' AND expires_at>UTC_TIMESTAMP(6)", owner.tenantId(), owner.userId(), runId.toString()); });
+    }
+    @Override public com.tianmu.agent.core.DanmakuTypes.ReportRef saveReport(UUID runId, AccessScope owner, String evidenceId, byte[] html) {
+        if (html.length > 262144) throw new AgentException("ARTIFACT_TOO_LARGE", "Report exceeds 256 KiB");
+        RunState run = load(runId, owner); Evidence evidence = run.execution().evidence().get(evidenceId);
+        if (evidence == null || evidence.analysis() == null) throw new AgentException("INVALID_EVIDENCE", "Danmaku analysis evidence required");
+        String id = "rp_" + UUID.randomUUID(), object = id + ".html", digest = FileObjectStore.hash(html);
+        write(() -> {
+            var prior = row(runId, owner, false); var sess = session(UUID.fromString(prior.get("session_id").toString()), owner, true);
+            var row = row(runId, owner, true); Meta m = meta(row); active(sess, row, m);
+            if (terminal(row)) throw new AgentException("RUN_TERMINATED", "Task is terminal");
+            Integer count = db.queryForObject("SELECT COUNT(*) FROM agent_artifact WHERE tenant_id=? AND run_id=? AND media_type='text/html'", Integer.class, owner.tenantId(), runId.toString());
+            if (count != null && count >= 2) throw new AgentException("CAPACITY_EXCEEDED", "Report limit reached");
+            db.update("INSERT INTO agent_artifact(tenant_id,owner_user_id,session_id,run_id,artifact_id,object_key,media_type,expires_at) VALUES(?,?,?,?,?,?,'text/html',?)",
+                    owner.tenantId(), owner.userId(), m.session().toString(), runId.toString(), id, object, row.get("data_expires_at")); return null;
+        });
+        try {
+            objects.put(object, html);
+            write(() -> {
+                var prior = row(runId, owner, false); var sess = session(UUID.fromString(prior.get("session_id").toString()), owner, true);
+                var row = row(runId, owner, true); Meta m = meta(row); active(sess, row, m);
+                if (terminal(row)) throw new AgentException("RUN_TERMINATED", "Task is terminal");
+                db.update("UPDATE agent_artifact SET status='READY',size_bytes=?,content_sha256=?,ready_at=UTC_TIMESTAMP(6) WHERE tenant_id=? AND artifact_id=?", html.length, digest, owner.tenantId(), id);
+                audit(m, "REPORT_CREATED", "READY"); return null;
+            });
+        } catch (RuntimeException e) { try { objects.delete(object); } catch (RuntimeException ignored) {} throw e; }
+        return new com.tianmu.agent.core.DanmakuTypes.ReportRef(id, "/api/agent/runs/" + runId + "/reports/" + id);
+    }
+    @Override public byte[] report(UUID runId, AccessScope caller, String artifactId) {
+        load(runId, caller);
+        Integer found = read(() -> db.queryForObject("SELECT COUNT(*) FROM agent_artifact WHERE tenant_id=? AND owner_user_id=? AND run_id=? AND artifact_id=? AND media_type='text/html'", Integer.class,
+                caller.tenantId(), caller.userId(), runId.toString(), artifactId));
+        if (found == null || found != 1) throw new AgentException("RESULT_NOT_FOUND", "Report not found");
+        return artifact(runId, artifactId, caller);
     }
     public byte[] artifact(UUID runId, String id, AccessScope owner) {
         Map<String, Object> row = write(() -> {

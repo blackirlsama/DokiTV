@@ -21,6 +21,9 @@ public interface ToolContext {
     List<ToolDefinition> definitionsForSkill(String name);
     Evidence evidence(String id);
     Evidence registerEvidence(MetricData data);
+    default void checkDanmakuQuery(com.tianmu.agent.core.DanmakuTypes.Query query) { throw new com.tianmu.agent.core.AgentException("TOOL_CAPABILITY_DENIED", "Danmaku analysis unavailable"); }
+    default Evidence registerDanmakuEvidence(com.tianmu.agent.core.DanmakuTypes.Dataset data) { throw new com.tianmu.agent.core.AgentException("TOOL_CAPABILITY_DENIED", "Danmaku evidence unavailable"); }
+    default com.tianmu.agent.core.DanmakuTypes.ReportRef saveReport(String evidenceId, byte[] html) { throw new com.tianmu.agent.core.AgentException("TOOL_CAPABILITY_DENIED", "Report storage unavailable"); }
     void checkQuery(MetricQuery query);
     <T> T query(Function<CallControl, T> operation);
 }

@@ -16,7 +16,7 @@ public class ReadResultTool implements AgentTool {
     public ToolResult execute(ToolCall call, ToolContext context) {
         Evidence evidence = context.evidence(ToolArguments.text(call, "result_id"));
         final String body;
-        try { body = JSON.writeValueAsString(evidence.data()); }
+        try { body = JSON.writeValueAsString(evidence.facts()); }
         catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             throw new com.tianmu.agent.core.AgentException("INVALID_EVIDENCE", "Cannot serialize evidence");
         }
@@ -27,6 +27,6 @@ public class ReadResultTool implements AgentTool {
             return new ToolResult(name(), Map.of("evidence_id", evidence.id(), "format", "json",
                     "page", TextPage.read(body, offset, limit)), evidence.id());
         }
-        return new ToolResult(name(), Map.of("metric", evidence.data()), evidence.id());
+        return new ToolResult(name(), Map.of(evidence.analysis() == null ? "metric" : "analysis", evidence.facts()), evidence.id());
     }
 }

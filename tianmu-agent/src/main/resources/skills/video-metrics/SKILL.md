@@ -1,5 +1,6 @@
 # Video metrics
 
+Videos and live rooms share videoId, authorization and danmaku semantics. This skill handles either name.
 Call query_video_metrics with video_id, date (ISO-8601), metric=bullet_count.
 Read source, metric_version, data_as_of and demo from the result. Cite its evidence_id.
 If demo=true, explicitly label the result as simulated data.

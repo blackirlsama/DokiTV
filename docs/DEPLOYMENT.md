@@ -30,7 +30,7 @@ docker compose -f tianmu-agent/infra/storage/compose.yml up -d
 java -jar tianmu-agent/target/operations-agent-0.7.0-SNAPSHOT.jar --spring.profiles.active=demo,persistent
 ```
 
-Flyway 只管理 Agent 专用数据库；不要把 AGENT_JDBC_URL 指向原业务数据库。产物目录通过 AGENT_OBJECT_DIRECTORY 配置，默认 `./var/artifacts`，不可直接作为 Web 静态目录公开。持久化边界详见 [存储接入](../tianmu-agent/docs/持久化存储接入.md)。
+Flyway 只管理 Agent 专用数据库；不要把 AGENT_JDBC_URL 指向原业务数据库。persistent 默认将报告HTML与证据JSON写入既有MinIO，复用 `TIANMU_MINIO_URL`、`TIANMU_MINIO_ACCESS_KEY`、`TIANMU_MINIO_SECRET_KEY`，因此需向Agent进程提供这些变量。私有bucket默认 `tianmu-agent-artifacts`，可用 `AGENT_MINIO_BUCKET` 和 `AGENT_MINIO_PREFIX` 覆盖；地址与凭据也可用 `AGENT_MINIO_*` 覆盖。本机只启动MySQL/Redis时显式设置 `AGENT_OBJECT_STORE=file`，目录由 `AGENT_OBJECT_DIRECTORY` 配置。已有本地对象切换前需要迁移，详见 [存储接入](../tianmu-agent/docs/持久化存储接入.md)。
 
 ## 真实业务桥接
 

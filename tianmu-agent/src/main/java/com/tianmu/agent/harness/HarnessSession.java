@@ -26,12 +26,14 @@ public final class HarnessSession {
     private volatile Snapshot terminal;
     private volatile Instant terminalAt;
 
-    HarnessSession(RunState run, Tracer tracer, HookDispatcher hooks) {
+    HarnessSession(RunState run, Tracer tracer, HookDispatcher hooks, TraceDetails details) {
         this.run = run;
         this.hooks = hooks;
         this.tracer = tracer;
         root = tracer.spanBuilder("agent.run").startSpan();
-        context = Context.current().with(root).with(TraceUsage.KEY, usage);
+        TraceNode.begin(root, "agent.run");
+        Context base = Context.current().with(root).with(TraceUsage.KEY, usage);
+        context = details == null ? base : details.bind(base, run.id);
         TraceAttributes.apply(root, TraceSemantics.identity(run));
         TraceAttributes.apply(root, Map.of("run.id", run.id.toString(), "input.char_count", run.message.length()));
     }
@@ -40,6 +42,7 @@ public final class HarnessSession {
     void begin() {
         if (!begun.compareAndSet(false, true)) return;
         try (Scope scope = context.makeCurrent(); TraceLogScope mdc = new TraceLogScope(root, run.id.toString())) {
+            TraceDetails.input(Map.of("message", run.message, "businessDate", run.businessDate.toString()));
             marker(SpanType.RECEIVE_QUERY, Map.of("input.char_count", run.message.length()));
             fire(HookPoint.REQUEST_START, Map.of("input.char_count", run.message.length()));
         } finally { run.onTerminal(this::terminal); }
@@ -58,11 +61,15 @@ public final class HarnessSession {
     void marker(SpanType type, Map<String, Object> attributes) {
         Context parent = Span.current().getSpanContext().getTraceId().equals(traceId()) ? Context.current() : context;
         Span span = tracer.spanBuilder(type.value()).setParent(parent).startSpan();
-        try {
+        TraceNode.begin(span, type.value());
+        try (Scope scope = span.makeCurrent()) {
             TraceAttributes.apply(span, TraceSemantics.identity(run));
             TraceAttributes.apply(span, Map.of("span.type", type.value(), "loop.step", run.snapshot().steps()));
             TraceAttributes.apply(span, attributes);
-            if (type == SpanType.ERROR) span.setStatus(StatusCode.ERROR);
+            if (type == SpanType.RECEIVE_QUERY) TraceDetails.input(Map.of("message", run.message));
+            if (type == SpanType.FINISH) TraceDetails.output(attributes);
+            TraceNode.success(span);
+            if (type == SpanType.ERROR) { span.setStatus(StatusCode.ERROR); TraceAttributes.apply(span, Map.of("node.status", "FAILED")); }
         } finally { span.end(); }
     }
     private void terminal(Snapshot snapshot) {
@@ -87,6 +94,8 @@ public final class HarnessSession {
                     "run.preparation_calls", snapshot.preparationCalls(), "run.total_model_calls", snapshot.totalModelCalls()));
             Map<String, Object> finish = new HashMap<>(usage.totals());
             finish.put("usage.complete", ((Number) finish.get("usage.reported_calls")).longValue() == snapshot.totalModelCalls());
+            long reported = ((Number) finish.get("usage.reported_calls")).longValue();
+            finish.put("usage.state", snapshot.totalModelCalls() == 0 ? "NOT_APPLICABLE" : reported == 0 ? "NOT_REPORTED" : reported == snapshot.totalModelCalls() ? "REPORTED" : "PARTIAL");
             finish.put("finish.type", TraceSemantics.finishType(snapshot));
             finish.put("run.status", snapshot.status().name());
             finish.put("run.stop_reason", snapshot.stopReason().name());
@@ -96,8 +105,15 @@ public final class HarnessSession {
                 finish.put("run.answer_ready_ms", elapsed);
             if (snapshot.answer() != null) finish.put("answer.char_count", snapshot.answer().text().length());
             TraceAttributes.apply(root, finish);
+            TraceAttributes.apply(root, Map.of("node.status", switch (snapshot.status()) {
+                case CANCELLED -> "CANCELLED";
+                case FAILED -> snapshot.errorCode() != null && (snapshot.errorCode().contains("TIMEOUT") || snapshot.errorCode().contains("DEADLINE")) ? "TIMED_OUT" : "FAILED";
+                default -> "SUCCEEDED";
+            }));
+            TraceDetails.output(snapshot);
             if (snapshot.route() != null) TraceAttributes.apply(root, Map.of("request.route", snapshot.route().name(),
                     "preparation.emotion", snapshot.preparation().emotion().name(),
+                    "preparation.intent", snapshot.preparation().intent().name(),
                     "preparation.degraded_count", snapshot.preparation().degradedStages().size(),
                     "preparation.skipped_count", snapshot.preparation().skippedStages().size()));
             if (snapshot.faqId() != null) TraceAttributes.apply(root, Map.of("faq.id", snapshot.faqId(), "faq.version", snapshot.faqVersion()));

@@ -1,6 +1,7 @@
 package com.tianmu.agent.preparation;
 
 import com.tianmu.agent.core.PreparationTypes.*;
+import com.tianmu.agent.core.DanmakuTarget;
 import org.springframework.stereotype.Component;
 import java.time.*;
 import java.util.*;
@@ -10,8 +11,9 @@ import java.util.regex.Pattern;
 @org.springframework.core.annotation.Order(0)
 public class MetricQueryReadiness implements QueryReadinessPolicy {
     public Optional<Clarification> validate(Input input) {
+        if (DanmakuReportTask.requested(input.query())) return Optional.empty();
         if (!input.query().contains("弹幕")) return Optional.empty();
-        if (!Pattern.compile("视频\\s*\\d+").matcher(input.query()).find()) return ask("请提供要查询的视频ID。");
+        if (!DanmakuTarget.matcher(input.query()).find()) return ask("请提供要查询的videoId，可写成视频ID或直播间ID。");
         var dates = Pattern.compile("\\d{4}-\\d{2}-\\d{2}").matcher(input.query());
         LocalDate date;
         try {

@@ -15,7 +15,7 @@ public final class FileObjectStore implements com.tianmu.agent.runtime.store.Obj
         catch (IOException e) { throw new AgentException("OBJECT_STORE_UNAVAILABLE", "Private object directory cannot be opened"); }
     }
     private Path path(String key) {
-        if (!key.matches("[a-zA-Z0-9_-]{1,80}\\.json")) throw new AgentException("INVALID_ARGUMENTS", "Invalid object key");
+        ObjectKeys.validate(key);
         Path value = root.resolve(key).normalize();
         if (!value.startsWith(root) || Files.isSymbolicLink(value)) throw new AgentException("FORBIDDEN", "Invalid object path");
         return value;

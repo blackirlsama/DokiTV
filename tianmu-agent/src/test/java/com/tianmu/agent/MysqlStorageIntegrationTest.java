@@ -100,6 +100,23 @@ class MysqlStorageIntegrationTest {
         try (var files = java.nio.file.Files.list(directory)) { assertEquals(0, files.count()); }
         assertEquals(1, db.queryForObject("SELECT COUNT(*) FROM agent_audit_event WHERE tenant_id=? AND session_id=? AND action='SESSION_DELETE_REQUESTED'", Integer.class, owner.tenantId(), run.sessionId.toString()));
     }
+    @Test void liveEvidenceAndHtmlReportSurviveReloadAndAreDeletedWithSession() throws Exception {
+        RunState run=create("live report"); run.start();
+        var q=new com.tianmu.agent.core.DanmakuTypes.Query(1001,run.businessDate.minusDays(1).atStartOfDay(),run.businessDate.atStartOfDay());
+        var bins=new java.util.ArrayList<com.tianmu.agent.core.DanmakuTypes.Bucket>();
+        for(int i=0;i<12;i++) bins.add(new com.tianmu.agent.core.DanmakuTypes.Bucket(i,0));
+        var data=new com.tianmu.agent.core.DanmakuTypes.Dataset(q,0,0,bins,List.of(),Instant.now(),"fixture",true);
+        String id="ev_"+UUID.randomUUID();
+        run.execution().evidence().put(new Evidence(id,run.id,owner,null,data));
+        assertEquals(data,repository.load(run.id,owner).execution().evidence().get(id).analysis());
+        byte[] html="<!doctype html><html>report</html>".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        var ref=repository.saveReport(run.id,owner,id,html);
+        run.succeed(new Answer("report",List.of(id)));
+        assertArrayEquals(html,repository.report(run.id,owner,ref.artifactId()));
+        assertThrows(AgentException.class,()->repository.report(run.id,new AccessScope(owner.tenantId(),"bob",owner.videoIds()),ref.artifactId()));
+        repository.deleteSession(run.sessionId,owner); repository.garbageCollect();
+        try(var files=java.nio.file.Files.list(directory)) { assertEquals(0,files.count()); }
+    }
     @Test void interruptedExecutionBecomesRunnerLostAndTheOldWriterCannotPublish() {
         RunState run = create("interrupted"); run.start(); repository.close();
         repository = new MysqlRunRepository(source, mapper, cache, new FileObjectStore(directory), Duration.ofSeconds(30), 16);

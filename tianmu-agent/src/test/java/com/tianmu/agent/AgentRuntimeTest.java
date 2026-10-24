@@ -50,7 +50,7 @@ class AgentRuntimeTest {
         UUID id = UUID.fromString(new com.fasterxml.jackson.databind.ObjectMapper().readTree(body).get("runId").asText());
         Snapshot snapshot = await(runs.owned(id, alice()));
         assertEquals(com.tianmu.agent.core.PreparationTypes.Route.FAQ, snapshot.route());
-        assertEquals("demo-capabilities", snapshot.faqId()); assertEquals("1", snapshot.faqVersion());
+        assertEquals("demo-capabilities", snapshot.faqId()); assertEquals("2", snapshot.faqVersion());
         assertEquals(Status.SUCCEEDED, snapshot.status()); assertEquals(0, snapshot.modelCalls());
     }
     @Test void serviceEntryClarifiesBeforeHarness() throws Exception {

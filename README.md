@@ -207,8 +207,8 @@ AGENT_BRIDGE_ENABLED=true java -jar target/tianmu-*.jar   # 启动后端（含�
 | --- | --- | --- | --- | --- |
 | `demo`（默认） | 模拟 | 模拟 | 脚本模型 | 内存 |
 | `demo,deepseek` | 模拟 | 模拟 | 真实模型 | 内存 |
-| `demo,persistent` | 模拟 | 模拟 | 脚本模型 | MySQL / Redis / 私有文件 |
-| `business,deepseek,persistent` | 业务登录与权限 | 真实指标 | 真实模型 | MySQL / Redis / 私有文件 |
+| `demo,persistent` | 模拟 | 模拟 | 脚本模型 | MySQL / Redis / 私有MinIO（本地可显式用文件） |
+| `business,deepseek,persistent` | 业务登录与权限 | 真实指标 | 真实模型 | MySQL / Redis / 既有MinIO私有bucket |
 
 **当前能力边界**：业务查询覆盖本人未删除视频、最近 30 个已结束自然日的按日弹幕数，统计范围为**当前已入库且仍保留的记录**，不等同于历史发送总量，也不包含消息队列中尚未落库的数据。Token / 费用预算、资源热更新、多实例调度、复杂 RAG 与报告生成尚未实现。
 

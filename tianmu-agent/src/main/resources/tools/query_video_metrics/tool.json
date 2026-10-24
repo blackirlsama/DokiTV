@@ -1,6 +1,6 @@
 {
   "name":"query_video_metrics",
-  "description":"Query a completed day of video bullet counts; only authorized videos are allowed",
+  "description":"Query a completed day of retained danmaku counts by video_id; videos and live rooms share the same ID and semantics. Only authorized IDs are allowed",
   "inputSchema":{
     "type":"object",
     "properties":{

@@ -83,10 +83,10 @@ class ProgressiveToolsTest {
     }
     @Test void referenceAccessRequiresRootSkillAndDoesNotAddAnotherTool() {
         SkillCatalog skills = new SkillCatalog();
-        List<AgentTool> handlers = List.of(new ListSkillsTool(), new ReadSkillTool(), new ReadResultTool(),
+        List<AgentTool> handlers = List.of(new ListSkillsTool(), new ReadSkillTool(), new ReadResultTool(), new QueryDanmakuTool((q, s, c) -> { throw new AssertionError("Unexpected live query"); }), new CreateDanmakuReportTool(new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules()),
                 new QueryVideoMetricsTool((q, s) -> { throw new AssertionError("Unexpected business query"); }));
         ToolRegistry registry = new ToolRegistry(handlers, new ToolCatalog(), skills);
-        assertEquals(4, new ToolCatalog().all().size());
+        assertEquals(6, new ToolCatalog().all().size());
         try (var fixture = new HarnessLifecycleTest.Fixture()) {
             var run = fixture.run(); run.start();
             ToolDispatcher dispatcher = new ToolDispatcher(skills, fixture.harness, registry);
@@ -123,7 +123,7 @@ class ProgressiveToolsTest {
     }
     @Test void evidencePagingUsesOwnedOriginalWithoutChangingLegacyShape() throws Exception {
         var skills = new SkillCatalog();
-        var registry = new ToolRegistry(List.of(new ListSkillsTool(), new ReadSkillTool(), new ReadResultTool(),
+        var registry = new ToolRegistry(List.of(new ListSkillsTool(), new ReadSkillTool(), new ReadResultTool(), new QueryDanmakuTool((q, s, c) -> { throw new AssertionError("Unexpected live query"); }), new CreateDanmakuReportTool(new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules()),
                 new QueryVideoMetricsTool((q, s) -> { throw new AssertionError(); })), new ToolCatalog(), skills);
         try (var fixture = new HarnessLifecycleTest.Fixture()) {
             var run = fixture.run(); run.start();

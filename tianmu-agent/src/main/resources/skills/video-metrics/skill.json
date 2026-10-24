@@ -1,7 +1,7 @@
 {
   "name": "video-metrics",
-  "version": "1.2.0",
-  "description": "按视频和业务日期查询弹幕数量",
+  "version": "1.3.0",
+  "description": "按videoId和业务日期查询弹幕数量，视频和直播间使用相同口径",
   "tools": ["query_video_metrics"],
   "resources": {"metric-semantics": "references/metric-semantics.md"}
 }

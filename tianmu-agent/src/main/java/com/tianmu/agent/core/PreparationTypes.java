@@ -8,6 +8,7 @@ import java.util.*;
 public final class PreparationTypes {
     private PreparationTypes() {}
     public enum Emotion { NEUTRAL, POSITIVE, NEGATIVE, UNKNOWN }
+    public enum Intent { VIDEO_METRIC, DANMAKU_REPORT, KNOWLEDGE, OTHER, UNKNOWN }
     public enum Route { FAQ, CLARIFY, HARNESS }
     public record Input(String query, LocalDate businessDate, AccessScope scope, MemoryTypes.View memory) {
         public Input(String query, LocalDate date, AccessScope scope) { this(query, date, scope, MemoryTypes.View.empty()); }
@@ -49,9 +50,12 @@ public final class PreparationTypes {
                 throw new IllegalArgumentException("Invalid curated FAQ entry");
         }
     }
-    public record PreparedRequest(String originalQuery, String query, Emotion emotion, Set<String> degradedStages, Set<String> skippedStages) {
+    public record PreparedRequest(String originalQuery, String query, Emotion emotion, Set<String> degradedStages, Set<String> skippedStages, Intent intent) {
+        public PreparedRequest(String originalQuery, String query, Emotion emotion, Set<String> degraded, Set<String> skipped) {
+            this(originalQuery, query, emotion, degraded, skipped, Intent.UNKNOWN);
+        }
         public PreparedRequest(String originalQuery, String query, Emotion emotion, Set<String> degraded) { this(originalQuery, query, emotion, degraded, Set.of()); }
-        public PreparedRequest { degradedStages = Set.copyOf(degradedStages); skippedStages = Set.copyOf(skippedStages); }
+        public PreparedRequest { degradedStages = Set.copyOf(degradedStages); skippedStages = Set.copyOf(skippedStages); intent = intent == null ? Intent.UNKNOWN : intent; }
     }
     public record Result(Route route, PreparedRequest request, FaqAnswer faq, String clarification) {}
 }

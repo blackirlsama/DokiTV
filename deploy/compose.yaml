@@ -58,6 +58,7 @@ services:
       AGENT_REDIS_HOST: redis
       AGENT_REDIS_PORT: "6379"
       AGENT_REDIS_PASSWORD_FILE: /run/secrets/redis-password
+      AGENT_OBJECT_STORE: file
       AGENT_OBJECT_DIRECTORY: /data/artifacts
       HARNESS_TRACE_DIRECTORY: /data/trace
       JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8 -Duser.timezone=UTC

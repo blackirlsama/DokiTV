@@ -35,9 +35,13 @@ public class TransformDispatcher {
             if (hook.point() != point) continue;
             checkpoint.run();
             Span span = tracer.spanBuilder("hook.transform_" + point.name()).startSpan();
+            TraceNode.begin(span, "hook.transform_" + point.name());
             TraceAttributes.apply(span, Map.of("run.id", context.runId().toString(), "hook.name", hook.name(),
                     "hook.point", point.name(), "hook.mode", "TRANSFORM"));
             try (Scope scope = span.makeCurrent(); TraceLogScope mdc = new TraceLogScope(span, context.runId().toString())) {
+                TraceDetails.input(current);
+                T prior = current;
+                int beforeBytes = mapper.writeValueAsBytes(current).length;
                 T next;
                 try { next = invoke(hook.hook(), point, current, context); }
                 catch (HookRejectedException e) { throw new AgentException("HOOK_REJECTED", "Transform rejected operation"); }
@@ -52,10 +56,18 @@ public class TransformDispatcher {
                 TransformInvariants.validate(point, input, next);
                 bounded(next, 1024 * 1024);
                 current = next;
+                TraceDetails.output(next);
+                TraceAttributes.apply(span, Map.of("context.input_bytes", beforeBytes, "context.output_bytes", mapper.writeValueAsBytes(next).length, "context.changed", !Objects.equals(prior, next)));
+                TraceNode.success(span);
             } catch (AgentException e) {
+                TraceNode.failure(span, e);
                 span.setStatus(StatusCode.ERROR);
                 TraceAttributes.apply(span, Map.of("hook.failed", true, "error.code", e.code()));
                 throw e;
+            } catch (java.io.IOException e) {
+                TraceAttributes.apply(span, Map.of("node.status", "FAILED"));
+                span.setStatus(StatusCode.ERROR);
+                throw new AgentException("HOOK_TRANSFORM_INVALID", "Transform payload cannot be serialized");
             } finally { span.end(); }
             checkpoint.run();
         }

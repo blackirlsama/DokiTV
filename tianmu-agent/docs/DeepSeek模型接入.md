@@ -6,7 +6,7 @@
 
 | 阶段 | 默认模型 ID | 调用方式 |
 |---|---|---|
-| 问题理解（澄清、条件提取、改写）与情绪 | deepseek-flash | 两个请求并行，共用一个 Key；情绪不额外阻塞 |
+| 意图、问题理解（澄清、条件提取、改写）与情绪 | deepseek-flash | 三个请求并行，共用一个 Key；情绪不额外阻塞，每路分别计入调用预算 |
 | Harness 决策与无工具收尾 | deepseek-v4-pro | 按循环顺序调用，使用同一 Key |
 | FAQ 命中 | 无 | 静态已批准条目直接交付 |
 
@@ -39,7 +39,7 @@ java -jar target/operations-agent-0.7.0-SNAPSHOT.jar --spring.profiles.active=de
 
 ## 网络、输出与取消
 
-使用 JDK HttpClient，不额外引入供应商 SDK。连接超时 3 秒；真实模型 profile 下问题理解上限 10 秒、情绪 3 秒（汇合时未就绪则不额外等待），主循环单次等待 30 秒，收尾 15 秒，请求总时限 120 秒。各阶段仍受总截止时间约束。这些是初始联调参数，需根据实际延迟分布调整。
+使用 JDK HttpClient，不额外引入供应商 SDK。连接超时 3 秒；真实模型 profile 下意图与问题理解分别上限 10 秒、情绪 3 秒（汇合时未就绪则不额外等待），主循环单次等待 30 秒，收尾 15 秒，请求总时限 120 秒。各阶段仍受总截止时间约束。这些是初始联调参数，需根据实际延迟分布调整。
 
 问题理解一次返回 `needsClarification / clarificationQuestion / conditions / rewrittenQuery`。服务端校验候选条件与原问题的一致性，理解失败保守追问，仅改写不合格时回原文。
 

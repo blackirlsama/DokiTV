@@ -22,7 +22,8 @@ DEPLOY = ROOT / 'deploy'
 ALLOWED = {'TIANMU_STACK_NAME', 'TIANMU_SECRETS_DIR', 'TIANMU_IMAGE_TAG', 'AGENT_HTTP_PORT',
            'AGENT_MEMORY_LIMIT', 'MYSQL_IMAGE', 'REDIS_IMAGE', 'MAVEN_IMAGE', 'JAVA_IMAGE',
            'BUSINESS_BASE_URL', 'DEEPSEEK_BASE_URL', 'PREPARATION_MODEL', 'HARNESS_MODEL', 'DEPLOYMENT_MODE',
-           'TRACE_MODE', 'KAFKA_IMAGE', 'KAFKA_CLUSTER_ID', 'KAFKA_TRACE_TOPIC', 'CLICKHOUSE_IMAGE'}
+           'TRACE_MODE', 'KAFKA_IMAGE', 'KAFKA_CLUSTER_ID', 'KAFKA_TRACE_TOPIC', 'CLICKHOUSE_IMAGE',
+           'AGENT_MINIO_URL', 'AGENT_MINIO_BUCKET', 'AGENT_MINIO_PREFIX'}
 
 
 def require(ok, message):
@@ -106,6 +107,12 @@ def preflight(values, business=False):
         require(url.scheme == 'https' and url.hostname and not url.username and not url.password and not url.query and not url.fragment,
                 'Business mode requires an HTTPS bridge URL without credentials or a query')
         require((Path(values['TIANMU_SECRETS_DIR']) / 'model-api-key').stat().st_size > 0, 'Provide a private model key file')
+        minio = urlsplit(values.get('AGENT_MINIO_URL', ''))
+        require(minio.scheme in ('http', 'https') and minio.hostname and not minio.username and not minio.password and not minio.query and not minio.fragment,
+                'Business mode requires the existing MinIO endpoint without credentials in its URL')
+        for name in ('minio-access-key', 'minio-secret-key'):
+            path = Path(values['TIANMU_SECRETS_DIR']) / name
+            require(path.is_file() and path.stat().st_size > 0, 'Provide private MinIO credential files')
 
 
 def enable_kafka(env_path):

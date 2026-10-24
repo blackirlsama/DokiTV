@@ -4,7 +4,14 @@ agent:
     jdbc-url: ${AGENT_JDBC_URL:}
     username: ${AGENT_DB_USER:}
     password: ${AGENT_DB_PASSWORD:}
+    object-store: ${AGENT_OBJECT_STORE:minio}
     object-directory: ${AGENT_OBJECT_DIRECTORY:./var/artifacts}
+    minio:
+      endpoint: ${AGENT_MINIO_URL:${TIANMU_MINIO_URL:http://127.0.0.1:9000}}
+      access-key: ${AGENT_MINIO_ACCESS_KEY:${TIANMU_MINIO_ACCESS_KEY:}}
+      secret-key: ${AGENT_MINIO_SECRET_KEY:${TIANMU_MINIO_SECRET_KEY:}}
+      bucket: ${AGENT_MINIO_BUCKET:tianmu-agent-artifacts}
+      prefix: ${AGENT_MINIO_PREFIX:agent-artifacts/}
     redis:
       enabled: ${AGENT_REDIS_ENABLED:true}
       host: ${AGENT_REDIS_HOST:127.0.0.1}
