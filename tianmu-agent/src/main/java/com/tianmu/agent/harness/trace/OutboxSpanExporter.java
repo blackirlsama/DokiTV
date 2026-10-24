@@ -69,7 +69,7 @@ public final class OutboxSpanExporter implements SpanExporter {
             try {
                 json = spool.read(path);
                 event = mapper.readValue(json, TraceEnvelope.class);
-                if (event == null || !"1.0".equals(event.schemaVersion()) || event.eventId() == null
+                if (event == null || !Set.of("1.0", TraceEnvelope.SCHEMA_VERSION).contains(event.schemaVersion()) || event.eventId() == null
                         || event.traceId() == null || !event.traceId().matches("[0-9a-f]{32}"))
                     throw new IllegalArgumentException("Invalid trace envelope");
             } catch (Exception e) {

@@ -117,7 +117,7 @@ RunSession 保存显式 Context，排队执行、取消 HTTP 线程、失败与�
 权限上下文仍要显式传参，不能从 Trace Baggage 或 ThreadLocal 推断。
 MDC 每个 Scope 退出后恢复原值，避免线程池串任务。普通日志可通过相同 ID 关联。
 
-HTTP Span 记录的是接入阶段；SSE 连接持续时间与每次网络发送尚未单独建 Span。
+HTTP Span 记录接入阶段；每次 SSE 订阅另有 terminal_delivery Span，记录首次有效内容提交发送的耗时和重放标识。字段见 [Trace 业务语义](Trace业务语义与字段.md)。
 终态监听在 RunState 状态锁外执行；DONE 后拒绝继续追加进度，防止取消与晚到结果破坏事件流。
 
 ## Kafka 与本地缓冲的投递语义
@@ -153,7 +153,7 @@ enqueueFailures / deliveryFailures / quarantined。尚未暴露公网诊断端�
 
 ## JSON 数据契约
 
-Kafka value 是 TraceEnvelope v1.0 JSON，当前不是 OTLP protobuf：
+Kafka value 是 TraceEnvelope JSON，当前生成 v1.1，旧 v1.0 待投递记录仍可重放；不是 OTLP protobuf。下面保留 v1.0 基础结构示例，新增字段见 [Trace 业务语义](Trace业务语义与字段.md)：
 
 ```json
 {
@@ -176,8 +176,8 @@ Kafka value 是 TraceEnvelope v1.0 JSON，当前不是 OTLP protobuf：
 
 Header 包含 schema_version 和 event_id。消费端处理未知字段时保持向前兼容；不认识主版本时隔离而非盲目解释。
 消费端事务性写入存储与 event_id 去重键之后再提交 Kafka offset，避免边消费边丢数据。
-Span 不含完整 Prompt、Token、弹幕原文、账号、凭证、工具参数和完整模型回答。
-“Token”此处指认证 Token；LLM Token 数和费用尚未接入。当前只记录输入字符数等少量结构化元数据。
+Span 不含完整 Prompt、认证 Token、弹幕原文、凭证、工具参数、内部思考和完整模型回答。
+可信身份中的租户、用户和会话标识用于关联查询。LLM Token 数来自提供方 usage，缺失时显式标注统计不完整；费用尚未接入。
 
 ## 启用与读取 Kafka
 

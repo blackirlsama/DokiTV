@@ -15,6 +15,7 @@ import java.time.*;
 import java.util.*;
 import com.tianmu.agent.core.PreparationTypes.*;
 import com.tianmu.agent.prompt.PromptCatalog;
+import com.tianmu.agent.harness.trace.*;
 
 @Component
 public class AgentRuntime {
@@ -67,6 +68,28 @@ public class AgentRuntime {
         runLoop(run, task.query());
     }
     private void runLoop(RunState run, String message) {
+        List<String> available = tools.definitions(run.execution().activeSkills()).stream()
+                .filter(tool -> run.task() == null || run.task().allowedTools().contains(tool.name()))
+                .map(ToolDefinition::name).toList();
+        Map<String, Object> start = new HashMap<>();
+        start.put("agent.max_turns", harness.policy().maxTurns());
+        start.put("agent.available_tools", available.stream().limit(32).toList());
+        start.put("agent.available_tool_count", available.size());
+        if (model.modelName() != null) start.put("model.name", model.modelName());
+        harness.marker(run, SpanType.AGENT_START, start);
+        boolean returned = false;
+        try { runLoopBody(run, message); returned = true; }
+        finally {
+            Map<String, Object> end = new HashMap<>();
+            end.put("agent.total_turns", run.snapshot().steps());
+            end.put("agent.reached_turn_limit", run.snapshot().steps() >= harness.policy().maxTurns());
+            end.put("agent.outcome", !returned ? "ERROR" : run.snapshot().status().name());
+            TraceUsage usage = io.opentelemetry.context.Context.current().get(TraceUsage.KEY);
+            if (usage != null) end.putAll(usage.totals());
+            harness.marker(run, SpanType.AGENT_END, end);
+        }
+    }
+    private void runLoopBody(RunState run, String message) {
         run.emit("PROGRESS", Map.of("stage", "harness"));
         Progress progress = new Progress();
         int max = harness.policy().maxTurns();
@@ -90,7 +113,8 @@ public class AgentRuntime {
     }
     private Decision decide(RunState run, ModelContext context) {
         return harness.stage(run, context.finalizing() ? "agent.model.finalize" : "agent.model", HookPoint.PRE_MODEL, HookPoint.POST_MODEL,
-                Map.of("run.finalizing", context.finalizing()), () -> {
+                Map.of("run.finalizing", context.finalizing(), "loop.step", run.snapshot().steps(),
+                        "agent.available_tools", context.availableTools().stream().map(ToolDefinition::name).limit(32).toList()), () -> {
             Decision raw = harness.modelCall(run, context.finalizing(), control -> context.finalizing()
                     ? model.finalizeWithoutTools(context, control) : model.decide(context, control));
             if (raw == null || raw.kind() == null) throw new AgentException("INVALID_DECISION", "Missing model decision");

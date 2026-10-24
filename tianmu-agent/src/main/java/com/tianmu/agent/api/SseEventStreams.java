@@ -3,6 +3,8 @@ package com.tianmu.agent.api;
 import com.tianmu.agent.core.AgentException;
 import com.tianmu.agent.runtime.RunState;
 import com.tianmu.agent.runtime.events.RunEventStore;
+import com.tianmu.agent.harness.trace.*;
+import io.opentelemetry.api.trace.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import jakarta.annotation.PreDestroy;
@@ -13,6 +15,10 @@ import java.util.concurrent.atomic.*;
 /** Slow network clients never execute under a task-state lock or on an Agent worker. */
 @Component
 public class SseEventStreams implements AutoCloseable {
+    private final Tracer tracer;
+    public SseEventStreams() { this(io.opentelemetry.api.OpenTelemetry.noop().getTracer("tianmu.sse")); }
+    @org.springframework.beans.factory.annotation.Autowired
+    public SseEventStreams(Tracer tracer) { this.tracer = tracer; }
     private final Semaphore capacity = new Semaphore(64);
     private final Set<Subscription> subscriptions = ConcurrentHashMap.newKeySet();
     private final ThreadPoolExecutor delivery = new ThreadPoolExecutor(4, 4, 30, TimeUnit.SECONDS,
@@ -25,7 +31,7 @@ public class SseEventStreams implements AutoCloseable {
         SseEmitter emitter;
         try { emitter = newEmitter(); }
         catch (RuntimeException e) { capacity.release(); throw e; }
-        Subscription subscription = new Subscription(run.events(), after, emitter);
+        Subscription subscription = new Subscription(run, after, emitter);
         subscriptions.add(subscription);
         try { subscription.attach(); return subscription.emitter; }
         catch (RuntimeException e) { subscription.stop(); throw e; }
@@ -35,8 +41,20 @@ public class SseEventStreams implements AutoCloseable {
         private final SseEmitter emitter;
         private final AtomicBoolean stopped = new AtomicBoolean(), scheduled = new AtomicBoolean();
         private volatile RunEventStore.Registration registration;
+        private final Span span;
+        private final long subscribedAt = System.nanoTime();
+        private final java.time.Instant createdAt;
+        private final AtomicBoolean firstContent = new AtomicBoolean();
+        private volatile boolean complete;
         private long cursor;
-        Subscription(RunEventStore store, long cursor, SseEmitter emitter) { this.store = store; this.cursor = cursor; this.emitter = emitter; }
+        Subscription(RunState run, long cursor, SseEmitter emitter) {
+            this.store = run.events(); this.cursor = cursor; this.emitter = emitter; this.createdAt = run.createdAt;
+            span = tracer.spanBuilder(SpanType.TERMINAL_DELIVERY.value()).startSpan();
+            TraceAttributes.apply(span, TraceSemantics.identity(run));
+            TraceAttributes.apply(span, Map.of("span.type", SpanType.TERMINAL_DELIVERY.value(), "delivery.type", "SSE",
+                    "delivery.replay", cursor > 0 || com.tianmu.agent.core.AgentTypes.terminal(run.snapshot().status())));
+            if (run.snapshot().traceId() != null) TraceAttributes.apply(span, Map.of("run.trace_id", run.snapshot().traceId()));
+        }
         void attach() {
             emitter.onCompletion(this::stop);
             emitter.onTimeout(() -> { stop(); emitter.complete(); });
@@ -56,9 +74,13 @@ public class SseEventStreams implements AutoCloseable {
                     for (var event : batch.events()) {
                         if (stopped.get()) return;
                         emitter.send(SseEmitter.event().id(Long.toString(event.sequence())).name(event.type()).data(event));
+                        if (Set.of("ANSWER", "CLARIFICATION", "ERROR").contains(event.type()) && firstContent.compareAndSet(false, true))
+                            TraceAttributes.apply(span, Map.of("delivery.first_content_ms",
+                                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - subscribedAt),
+                                    "delivery.e2e_ms", Math.max(0, java.time.Duration.between(createdAt, java.time.Instant.now()).toMillis())));
                         cursor = event.sequence();
                     }
-                    if (batch.closed()) { emitter.complete(); stop(); return; }
+                    if (batch.closed()) { complete = true; emitter.complete(); stop(); return; }
                     scheduled.set(false);
                     RunEventStore.Batch latest = store.after(cursor);
                     if (latest.lastSequence() > cursor || latest.closed()) signal();
@@ -68,6 +90,9 @@ public class SseEventStreams implements AutoCloseable {
         }
         void stop() {
             if (!stopped.compareAndSet(false, true)) return;
+            TraceAttributes.apply(span, Map.of("delivery.success", complete));
+            if (!complete) span.setStatus(StatusCode.ERROR);
+            span.end();
             if (registration != null) registration.close();
             subscriptions.remove(this); capacity.release();
         }

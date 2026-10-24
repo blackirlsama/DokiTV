@@ -19,6 +19,7 @@ final class DeepSeekHarnessModel implements ModelPort {
         this.client = client; this.config = config; this.mapper = mapper;
         focusPrompt = prompts.text("common.current-focus-boundary"); systemPrompt = prompts.text("harness.system"); commonPrompt = prompts.text("common.json-output");
     }
+    public String modelName() { return config.harnessModel(); }
     public Decision decide(ModelContext context) {
         return decide(context, new CallControl(Instant.now().plusSeconds(30), new CancellationToken()));
     }

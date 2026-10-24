@@ -24,7 +24,8 @@ public class DeliveryService {
     }
     public void faq(RunState run, FaqAnswer faq) {
         TurnControl.Reservation reservation = reserve(run);
-        harness.stage(run, "agent.deliver.faq", HookPoint.PRE_DELIVER, HookPoint.POST_DELIVER, Map.of(), () -> {
+        harness.stage(run, "agent.deliver.faq", HookPoint.PRE_DELIVER, HookPoint.POST_DELIVER,
+                com.tianmu.agent.harness.trace.TraceSemantics.faq(faq), () -> {
             Answer answer = harness.transform(run, TransformPoint.ANSWER, new Answer(faq.text(), List.of()));
             // Only the trusted FAQ route may deliver a static answer without metric evidence.
             if (!answer.evidenceIds().isEmpty()) throw new AgentException("INVALID_EVIDENCE", "FAQ cannot invent evidence");

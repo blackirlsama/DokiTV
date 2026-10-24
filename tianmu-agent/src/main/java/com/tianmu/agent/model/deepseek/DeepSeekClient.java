@@ -26,6 +26,7 @@ public final class DeepSeekClient {
     }
     public JsonNode complete(String model, List<Map<String, String>> messages, int maxTokens, CallControl control) {
         control.checkpoint();
+        TraceAttributes.apply(Span.current(), Map.of("model.name", model));
         long nanos = Duration.between(Instant.now(), control.deadline()).toNanos();
         if (nanos <= 0) throw unavailable();
         try {
@@ -49,15 +50,17 @@ public final class DeepSeekClient {
                 if (response.statusCode() == 429 || response.statusCode() >= 500) throw unavailable();
                 if (response.statusCode() != 200) throw new AgentException("MODEL_REQUEST_REJECTED", "Model provider rejected request");
                 JsonNode body = mapper.readTree(response.body());
+                // Count provider-reported usage even if the generated JSON or finish reason is unusable.
+                JsonNode usage = body.path("usage");
+                if (usage.path("prompt_tokens").isIntegralNumber() && usage.path("completion_tokens").isIntegralNumber())
+                    com.tianmu.agent.harness.trace.TraceUsage.record(model,
+                            usage.path("prompt_tokens").asLong(), usage.path("completion_tokens").asLong());
                 JsonNode choice = body.path("choices").path(0);
                 if (!"stop".equals(choice.path("finish_reason").asText())) throw unavailable();
                 JsonNode content = choice.path("message").path("content");
                 if (!content.isTextual() || content.textValue().isBlank()) throw unavailable();
                 JsonNode result = mapper.readTree(content.textValue());
                 if (result == null || !result.isObject()) throw unavailable();
-                TraceAttributes.apply(Span.current(), Map.of("model.name", model,
-                        "model.input_tokens", Math.max(0, body.path("usage").path("prompt_tokens").asLong()),
-                        "model.output_tokens", Math.max(0, body.path("usage").path("completion_tokens").asLong())));
                 return result;
             }
         } catch (AgentException e) { throw e; }

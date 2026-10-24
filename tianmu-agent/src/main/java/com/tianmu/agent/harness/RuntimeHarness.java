@@ -49,6 +49,9 @@ public class RuntimeHarness implements AutoCloseable {
     }
     public void execute(RunState run, Runnable operation) { start(run).execute(operation); }
     public LoopPolicy policy() { return loopControl.policy(); }
+    public void marker(RunState run, SpanType type, Map<String, Object> attributes) {
+        start(run).marker(type, attributes);
+    }
     public <T> T modelCall(RunState run, boolean finalizing, Function<CallControl, T> operation) {
         run.modelCallStarted();
         return loopControl.call(run, finalizing ? policy().finalizeTimeout() : policy().modelTimeout(),
@@ -66,25 +69,35 @@ public class RuntimeHarness implements AutoCloseable {
                 ? Context.current() : session.context();
         Span span = tracer.spanBuilder(name).setParent(parent).startSpan();
         TraceAttributes.apply(span, attributes);
+        TraceAttributes.apply(span, TraceSemantics.identity(run));
+        SpanType type = SpanType.forStage(name);
+        if (type != null) TraceAttributes.apply(span, Map.of("span.type", type.value()));
         TraceAttributes.apply(span, Map.of("run.id", run.id.toString(), "loop.step", run.snapshot().steps()));
         boolean executed = false;
         String outcome = "success";
         String error = "";
+        Map<String, Object> resultAttributes = new HashMap<>();
         try (Scope scope = span.makeCurrent(); TraceLogScope mdc = new TraceLogScope(span, run.id.toString())) {
             try {
                 run.checkpoint();
                 if (before != null) session.fire(before, attributes);
                 run.checkpoint();
                 executed = true;
-                return operation.get();
+                T value = operation.get();
+                if (!(value instanceof Optional<?>) || type == SpanType.FAQ_LOOKUP)
+                    resultAttributes.putAll(TraceSemantics.result(value));
+                return value;
             } catch (RuntimeException e) {
                 outcome = "error";
                 error = e instanceof AgentException agent ? agent.code() : "INTERNAL_ERROR";
                 span.setStatus(StatusCode.ERROR);
                 TraceAttributes.apply(span, Map.of("error.code", error, "exception.type", e.getClass().getSimpleName()));
+                if (type == SpanType.TOOL_CALL) resultAttributes.put("tool.success", false);
+                if (type == SpanType.LLM_INFERENCE) resultAttributes.put("model.decision", "ERROR");
                 throw e;
             } finally {
                 Map<String, Object> result = new HashMap<>(attributes);
+                result.putAll(resultAttributes);
                 result.put("operation.outcome", outcome);
                 result.put("operation.executed", executed);
                 if (!error.isEmpty()) result.put("error.code", error);

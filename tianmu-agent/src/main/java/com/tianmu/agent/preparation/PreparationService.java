@@ -61,7 +61,7 @@ public class PreparationService implements AutoCloseable {
         if (hit.isPresent()) return new Result(Route.FAQ,
                 new PreparedRequest(run.message, query, Emotion.UNKNOWN, degraded, Set.of("understanding", "emotion")), hit.get(), null);
 
-        if (repository != null) run.memory(repository.memory(run));
+        if (repository != null) run.memory(harness.stage(run, "agent.memory.load", null, null, Map.of(), () -> repository.memory(run)));
         Input contextInput = new Input(query, run.businessDate, run.owner, run.memory());
         Optional<Clarification> required = harness.stage(run, "agent.prepare.validate", null, null, Map.of(),
                 () -> validators.stream().map(v -> v.validate(contextInput)).flatMap(Optional::stream).filter(Clarification::required).findFirst());
