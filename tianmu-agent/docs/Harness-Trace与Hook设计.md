@@ -3,6 +3,8 @@
 v0.3 增量：已增加类型化 TransformHook<T>，与本文的 Observer/Gate 契约并存。
 上下文和结果变换不修改 HookEvent，而通过返回新值组合；详见《Hook变换链设计》。
 
+2026-10-24 部署进展：staging 已实际启用 Kafka → ClickHouse，含断线补发、消费恢复、重复事件查询去重与异常消息隔离；见 [实际验收](Kafka-ClickHouse验收.md) 和 [部署操作](../../deploy/KAFKA_TRACE.md)。
+
 ## 目标与当前实现
 
 这次实现两个可独立扩展的能力：

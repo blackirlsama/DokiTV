@@ -24,6 +24,7 @@ public class TaskAssembler {
         this.meaning = meaning;
         Map<String, String> loaded = new TreeMap<>();
         skills.names().forEach(name -> loaded.put("skill:" + name, skills.read(name).version()));
+        skills.names().forEach(name -> loaded.put("skill-content:" + name, skills.fingerprint(name)));
         prompts.ids().forEach(id -> loaded.put("prompt:" + id, prompts.get(id).version()));
         tools.all().forEach((name, definition) -> loaded.put("tool:" + name, fingerprint(definition)));
         versions = Map.copyOf(loaded); allowedTools = Set.copyOf(tools.all().keySet());

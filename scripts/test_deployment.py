@@ -61,6 +61,33 @@ class DeploymentContract(unittest.TestCase):
                 deployment.activate(file)
             self.assertEqual(1, run.call_count)
 
+    def test_kafka_settings_require_stable_cluster_id_and_safe_topic(self):
+        values = deployment.read_env(ROOT / 'deploy' / '.env.example')
+        values.update(TRACE_MODE='kafka', KAFKA_CLUSTER_ID='4L6g3nShT-eMCtK--X86sw')
+        for topic in ['..', 'trace;touch /tmp/x', 'trace/invalid']:
+            file = self.root / ('invalid-' + str(len(topic)) + '.env')
+            deployment.write_env(file, dict(values, KAFKA_TRACE_TOPIC=topic))
+            with self.assertRaisesRegex(RuntimeError, 'topic'):
+                deployment.read_env(file)
+
+    def test_kafka_overlay_is_part_of_the_release_snapshot(self):
+        file = self.root / 'release.env'
+        (self.root / 'manifest.json').write_text('{}')
+        command = deployment.compose(file, {'TIANMU_STACK_NAME': 'test-stack', 'TRACE_MODE': 'kafka'})
+        self.assertIn(str(self.root / 'compose.kafka.yaml'), command)
+
+    def test_trace_mode_cannot_be_changed_after_build(self):
+        values = deployment.read_env(ROOT / 'deploy' / '.env.example')
+        values.update(TIANMU_IMAGE_TAG='release-002', DEPLOYMENT_MODE='staging')
+        file = self.root / 'release.env'
+        deployment.write_env(file, values)
+        (self.root / 'manifest.json').write_text(json.dumps({'image': 'tianmu-agent:release-002', 'mode': 'staging',
+                                                           'traceMode': 'kafka'}))
+        with patch.object(deployment, 'preflight'), patch.object(deployment, 'run') as run:
+            with self.assertRaisesRegex(RuntimeError, 'trace mode'):
+                deployment.activate(file)
+            run.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -14,6 +14,10 @@ public interface ToolContext {
     void checkpoint();
     List<Map<String, String>> listSkills();
     Skill activateSkill(String name);
+    default List<Map<String, Object>> skillResources(String name) { return List.of(); }
+    default Map<String, Object> skillResource(String name, String resource, int offset, int limit) {
+        throw new com.tianmu.agent.core.AgentException("SKILL_RESOURCE_NOT_FOUND", "Skill references are unavailable");
+    }
     List<ToolDefinition> definitionsForSkill(String name);
     Evidence evidence(String id);
     Evidence registerEvidence(MetricData data);

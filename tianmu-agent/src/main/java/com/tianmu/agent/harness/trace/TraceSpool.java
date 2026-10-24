@@ -51,10 +51,12 @@ public final class TraceSpool implements AutoCloseable {
         Path temporary = directory.resolve(key + ".tmp");
         Path stable = directory.resolve(key + ".pending");
         try {
-            try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
-                ByteBuffer buffer = ByteBuffer.wrap(payload);
-                while (buffer.hasRemaining()) channel.write(buffer);
-                channel.force(true);
+            Files.createFile(temporary);
+            // Span completion also runs on cancelled preparation/tool threads. FileChannel I/O
+            // closes on interruption; the classic stream preserves the flag and durable enqueue.
+            try (FileOutputStream output = new FileOutputStream(temporary.toFile())) {
+                output.write(payload);
+                output.getFD().sync();
             }
             // No non-atomic fallback: do not present a partially committed record as exportable.
             Files.move(temporary, stable, StandardCopyOption.ATOMIC_MOVE);

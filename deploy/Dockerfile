@@ -6,7 +6,6 @@ FROM ${MAVEN_IMAGE} AS build
 WORKDIR /build
 ENV MAVEN_OPTS="-Xmx384m -XX:MaxMetaspaceSize=192m"
 COPY tianmu-agent/pom.xml ./pom.xml
-RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp dependency:go-offline
 COPY tianmu-agent/src ./src
 COPY deploy/HealthProbe.java /probe/HealthProbe.java
 RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -DskipTests package \

@@ -239,11 +239,13 @@ git diff --check                           # 空白与冲突标记
 
 | 文档 | 内容 |
 | --- | --- |
+| [换电脑启动与接续](docs/HANDOFF.md) | 启动命令、当前进度、部署差异与待办 |
 | [Agent 开发指南](tianmu-agent/README.md) | 代码分层与扩展入口 |
 | [工程目录与扩展规范](tianmu-agent/docs/工程目录与扩展规范.md) | Skill、Tool、Prompt 的开发约定 |
 | [接口契约](tianmu-agent/docs/接口契约.md) | 任务、会话、证据、SSE 与错误码 |
 | [持久化存储接入](tianmu-agent/docs/持久化存储接入.md) | 事务、缓存、恢复与清理策略 |
 | [Harness · Trace 与 Hook](tianmu-agent/docs/Harness-Trace与Hook设计.md) | 治理接口与链路导出 |
+| [Kafka → ClickHouse Trace](deploy/KAFKA_TRACE.md) | 实际部署、查询、去重与保留策略 |
 | [P0 业务接入](tianmu-agent/docs/P0业务接入.md) | 真实鉴权、查询与 SQL 对账 |
 | [路线图](docs/ROADMAP.md) | 可领取的协作任务与验收条件 |
 

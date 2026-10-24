@@ -1,0 +1,91 @@
+services:
+  kafka:
+    image: ${KAFKA_IMAGE:-apache/kafka:3.9.1}
+    restart: unless-stopped
+    mem_limit: 768m
+    environment:
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx256m
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:?Set a stable Kafka cluster UUID before first startup}
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_OFFSETS_TOPIC_NUM_PARTITIONS: "3"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_NUM_PARTITIONS: "3"
+      KAFKA_NUM_NETWORK_THREADS: "2"
+      KAFKA_NUM_IO_THREADS: "2"
+      KAFKA_LOG_SEGMENT_BYTES: "16777216"
+      KAFKA_LOG_RETENTION_HOURS: "168"
+      KAFKA_LOG_RETENTION_BYTES: "268435456"
+    volumes: [kafka-data:/var/lib/kafka/data]
+    healthcheck:
+      test: ["CMD-SHELL", "KAFKA_HEAP_OPTS='-Xms32m -Xmx64m' /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 20s
+      timeout: 15s
+      retries: 10
+      start_period: 40s
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+  kafka-init:
+    image: ${KAFKA_IMAGE:-apache/kafka:3.9.1}
+    restart: "no"
+    mem_limit: 192m
+    environment: {KAFKA_HEAP_OPTS: "-Xms32m -Xmx64m"}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - >-
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092
+        --create --if-not-exists --topic ${KAFKA_TRACE_TOPIC:-Tianmu.agent.trace.v1}
+        --partitions 3 --replication-factor 1
+        --config min.insync.replicas=1 --config retention.ms=604800000
+        --config retention.bytes=268435456 --config segment.bytes=16777216
+    depends_on: {kafka: {condition: service_healthy}}
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+  agent:
+    environment:
+      HARNESS_TRACE_SINK: kafka
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TRACE_TOPIC: ${KAFKA_TRACE_TOPIC:-Tianmu.agent.trace.v1}
+    depends_on: {kafka-init: {condition: service_completed_successfully}}
+  clickhouse:
+    image: ${CLICKHOUSE_IMAGE:-clickhouse/clickhouse-server:25.8}
+    restart: unless-stopped
+    mem_limit: 1024m
+    cpus: 2
+    ulimits: {nofile: {soft: 65536, hard: 65536}}
+    environment:
+      CLICKHOUSE_DB: tianmu_trace
+      CLICKHOUSE_USER: trace_admin
+      CLICKHOUSE_PASSWORD_FILE: /run/secrets/clickhouse-password
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+      KAFKA_TRACE_TOPIC: ${KAFKA_TRACE_TOPIC:-Tianmu.agent.trace.v1}
+    secrets: [clickhouse-password]
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse-config.xml:/etc/clickhouse-server/config.d/tianmu.xml:ro
+      - ./clickhouse-profiles.xml:/etc/clickhouse-server/users.d/tianmu-profiles.xml:ro
+      - ./clickhouse-init.sh:/docker-entrypoint-initdb.d/010-trace.sh:ro
+      - ./clickhouse-trace.sql:/opt/tianmu/trace-schema.sql:ro
+    depends_on: {kafka-init: {condition: service_completed_successfully}}
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user trace_admin --password \"$$(cat /run/secrets/clickhouse-password)\" --query \"SELECT 1 FROM system.tables WHERE database='tianmu_trace' AND name='trace_spans_current'\" | grep -qx 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+secrets:
+  clickhouse-password:
+    file: ${TIANMU_SECRETS_DIR:?Initialize private runtime configuration}/clickhouse-password
+volumes:
+  kafka-data:
+  clickhouse-data:

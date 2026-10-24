@@ -50,9 +50,29 @@ public class ToolDispatcher {
         public List<Map<String, String>> listSkills() { return skills.list(); }
         public Skill activateSkill(String name) {
             if (!tool.canActivateSkills()) throw new AgentException("TOOL_CAPABILITY_DENIED", "Tool cannot activate skills");
+            checkSkillRevision(name);
             Skill skill = skills.read(name);
             return harness.stage(run, "agent.skill", HookPoint.PRE_SKILL, HookPoint.POST_SKILL,
                     Map.of("skill.name", name, "skill.version", skill.version()), () -> { run.execution().activateSkill(name); return skill; });
+        }
+        private void checkSkillRevision(String name) {
+            Skill skill = skills.read(name);
+            if (run.task() == null) return;
+            var versions = run.task().resourceVersions();
+            String version = versions.get("skill:" + name), fingerprint = versions.get("skill-content:" + name);
+            if (version != null && !version.equals(skill.version())
+                    || fingerprint != null && !fingerprint.equals(skills.fingerprint(name)))
+                throw new AgentException("RESOURCE_VERSION_MISMATCH", "Skill differs from the prepared resource snapshot");
+        }
+        public List<Map<String, Object>> skillResources(String name) {
+            checkSkillRevision(name);
+            return skills.resources(name);
+        }
+        public Map<String, Object> skillResource(String name, String resource, int offset, int limit) {
+            if (!tool.canActivateSkills() || !run.execution().activeSkills().contains(name))
+                throw new AgentException("SKILL_REQUIRED", "Read the skill instructions before its references");
+            checkSkillRevision(name);
+            return skills.resource(name, resource, offset, limit);
         }
         public List<ToolDefinition> definitionsForSkill(String name) {
             Skill skill = skills.read(name);

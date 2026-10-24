@@ -49,6 +49,24 @@ class TraceDeliveryTest {
             assertEquals("first", spool.read(spool.oldest()));
         }
     }
+    @Test void cancelledThreadCanPersistFinalSpanWithoutLosingItsInterruptFlag() throws Exception {
+        try (TraceSpool spool = new TraceSpool(directory, 10, 8192, 2048)) {
+            AtomicReference<Throwable> failure = new AtomicReference<>();
+            AtomicBoolean interrupted = new AtomicBoolean();
+            Thread cancelled = new Thread(() -> {
+                Thread.currentThread().interrupt();
+                try { spool.append("cancelled-span"); }
+                catch (Throwable error) { failure.set(error); }
+                interrupted.set(Thread.currentThread().isInterrupted());
+            });
+            cancelled.start();
+            cancelled.join(3000);
+            assertFalse(cancelled.isAlive());
+            assertNull(failure.get());
+            assertTrue(interrupted.get());
+            assertEquals("cancelled-span", spool.read(spool.oldest()));
+        }
+    }
     @Test void failedSinkRetainsAndRestartReplaysStableEventId() throws Exception {
         TraceExportStats stats = new TraceExportStats();
         TraceSpool firstSpool = new TraceSpool(directory, 10, 65536, 4096);

@@ -20,7 +20,7 @@
 sudo python3 deploy/manage.py init --directory /opt/tianmu-staging/config
 ```
 
-生成三个独立随机凭据和非秘密配置文件，全部位于源码目录之外：
+生成数据库、Redis、ClickHouse 的独立随机凭据和非秘密配置文件，全部位于源码目录之外：
 
 ```text
 /opt/tianmu-staging/config/
@@ -28,7 +28,8 @@ sudo python3 deploy/manage.py init --directory /opt/tianmu-staging/config
 └── secrets/
     ├── agent-db-password
     ├── mysql-root-password
-    └── redis-password
+    ├── redis-password
+    └── clickhouse-password
 ```
 
 配置目录仅 root 可进入，凭据文件由容器 UID 10001 读取。初始化不会覆盖已有配置或旋转已使用的数据库密码。凭据以只读文件挂载，入口脚本读取后放入进程环境，不写进镜像或命令行。
@@ -96,3 +97,5 @@ sudo python3 deploy/manage.py up --env /opt/tianmu-staging/config/releases/NEW_R
 真实业务模式使用 `business,deepseek,persistent`，不会回退 Demo。此时 `verify` 只检查存活和就绪，不冒用 Demo 身份，也不自动发出收费模型查询。正式登录与业务查询需要使用授权账号另行验收。
 
 本方案先解决环境复现与部署边界；备份恢复、业务指标水位、生产限流、告警、完整压力测试与多实例属于后续生产化工作。
+
+Kafka Trace 与 ClickHouse 落库使用可选部署叠加文件；启用、查询、重复语义及保留策略见 [Kafka → ClickHouse Trace](KAFKA_TRACE.md)。

@@ -1,0 +1,26 @@
+<clickhouse>
+    <max_server_memory_usage>734003200</max_server_memory_usage>
+    <max_concurrent_queries>20</max_concurrent_queries>
+    <max_thread_pool_size>256</max_thread_pool_size>
+    <background_pool_size>8</background_pool_size>
+    <background_schedule_pool_size>8</background_schedule_pool_size>
+    <background_message_broker_schedule_pool_size>2</background_message_broker_schedule_pool_size>
+    <background_buffer_flush_schedule_pool_size>2</background_buffer_flush_schedule_pool_size>
+    <background_distributed_schedule_pool_size>2</background_distributed_schedule_pool_size>
+    <mark_cache_size>33554432</mark_cache_size>
+    <uncompressed_cache_size>16777216</uncompressed_cache_size>
+    <merge_tree>
+        <number_of_free_entries_in_pool_to_execute_mutation>2</number_of_free_entries_in_pool_to_execute_mutation>
+        <number_of_free_entries_in_pool_to_execute_optimize_entire_partition>2</number_of_free_entries_in_pool_to_execute_optimize_entire_partition>
+        <number_of_free_entries_in_pool_to_lower_max_size_of_merge>2</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
+    </merge_tree>
+    <logger><level>warning</level><console>true</console></logger>
+    <query_log remove="1"/>
+    <query_thread_log remove="1"/>
+    <trace_log remove="1"/>
+    <metric_log remove="1"/>
+    <asynchronous_metric_log remove="1"/>
+    <part_log remove="1"/>
+    <text_log remove="1"/>
+    <processors_profile_log remove="1"/>
+</clickhouse>

@@ -43,7 +43,7 @@ public class DemoAdapters {
             default -> throw new AgentException("UNAUTHORIZED", "Use Bearer demo-alice or demo-bob in local demo mode");
         };
     }
-    @Bean @Profile("!business") BusinessQueryPort demoQuery() {
+    @Bean @Profile("!business & !persistent") BusinessQueryPort demoQuery() {
         return (query, scope) -> {
             if (!scope.tenantId().equals("demo") || !scope.videoIds().contains(query.videoId()))
                 throw new AgentException("FORBIDDEN", "Video is outside your data scope");

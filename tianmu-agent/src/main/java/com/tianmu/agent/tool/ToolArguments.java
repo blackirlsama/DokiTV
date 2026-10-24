@@ -21,15 +21,19 @@ public final class ToolArguments {
     }
     public static void validate(ToolCall call, ToolDefinition definition) {
         Map<?, ?> properties = (Map<?, ?>) definition.inputSchema().get("properties");
-        if (!call.arguments().keySet().equals(properties.keySet())) throw invalid();
+        List<?> required = (List<?>) definition.inputSchema().get("required");
+        if (!properties.keySet().containsAll(call.arguments().keySet()) || !call.arguments().keySet().containsAll(required)) throw invalid();
         properties.forEach((key, spec) -> {
             String name = key.toString(); Map<?, ?> field = (Map<?, ?>) spec;
+            if (!call.arguments().containsKey(name)) return;
             if ("integer".equals(field.get("type"))) {
                 long value = integer(call, name);
                 if (field.containsKey("minimum") && BigDecimal.valueOf(value).compareTo(new BigDecimal(field.get("minimum").toString())) < 0) throw invalid();
+                if (field.containsKey("maximum") && BigDecimal.valueOf(value).compareTo(new BigDecimal(field.get("maximum").toString())) > 0) throw invalid();
             } else {
                 String value = text(call, name);
                 if (field.containsKey("minLength") && value.length() < ((Number) field.get("minLength")).intValue()) throw invalid();
+                if (field.containsKey("maxLength") && value.length() > ((Number) field.get("maxLength")).intValue()) throw invalid();
                 if ("date".equals(field.get("format"))) LocalDate.parse(value);
             }
             if (field.containsKey("enum") && !((List<?>) field.get("enum")).contains(call.arguments().get(name))) throw invalid();
