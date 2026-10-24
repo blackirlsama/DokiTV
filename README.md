@@ -239,7 +239,6 @@ git diff --check                           # 空白与冲突标记
 
 | 文档 | 内容 |
 | --- | --- |
-| [换电脑启动与接续](docs/HANDOFF.md) | 启动命令、当前进度、部署差异与待办 |
 | [Agent 开发指南](tianmu-agent/README.md) | 代码分层与扩展入口 |
 | [工程目录与扩展规范](tianmu-agent/docs/工程目录与扩展规范.md) | Skill、Tool、Prompt 的开发约定 |
 | [接口契约](tianmu-agent/docs/接口契约.md) | 任务、会话、证据、SSE 与错误码 |
